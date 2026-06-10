@@ -26,6 +26,7 @@ AI assistant instructions for this project.
 
 ## Task Management
 
+- Leverage `semble` mcp before read, grep or find files
 - Ask for permission before making significant changes
 - Confirm understanding before proceeding
 - Present options when multiple approaches exist
