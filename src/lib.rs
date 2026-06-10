@@ -1,16 +1,32 @@
 use std::{
     io::{self, Read, Write},
-    process::{Child, Command},
+    process::{Child, Command, Stdio},
 };
 
-fn run(interpreter_path: &str, vm_path: &str) -> anyhow::Result<Child> {
-    let child = Command::new(interpreter_path).spawn()?;
+pub fn run(interpreter_path: &str, vm_path: &str) -> anyhow::Result<Child> {
+    let child = Command::new(interpreter_path)
+        .arg(vm_path)
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .spawn()?;
 
     Ok(child)
 }
 
-fn relay(mut reader: impl Read, mut writer: impl Write) -> io::Result<u64> {
-    io::copy(&mut reader, &mut writer)
+pub fn relay(mut reader: impl Read, mut writer: impl Write) -> io::Result<u64> {
+    let mut buf = [0u8; 4096];
+    let mut total: u64 = 0;
+    loop {
+        let n = reader.read(&mut buf)?;
+        if n == 0 {
+            // EOF: um 終了
+            break;
+        }
+        writer.write_all(&buf[..n])?;
+        writer.flush()?;
+        total += n as u64;
+    }
+    Ok(total)
 }
 
 #[cfg(test)]

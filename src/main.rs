@@ -1,25 +1,29 @@
+use std::io::stdout;
+
+use anyhow::{Context, Result};
 use clap::Parser;
+use icfp2006_rust_adventure::{relay, run};
 
 #[derive(Parser, Debug)]
 #[clap(author = "sandmark", version, about)]
 /// Application configuration
 struct Args {
-    /// whether to be verbose
-    #[arg(short = 'v')]
-    verbose: bool,
+    /// path to the UMIX interpreter
+    #[arg(short = 'i')]
+    interpreter: String,
 
-    /// an optional name to greet
+    /// path to the VM file
     #[arg()]
-    name: Option<String>,
+    vm: String,
 }
 
-fn main() {
+fn main() -> Result<()> {
     let args = Args::parse();
-    if args.verbose {
-        println!("DEBUG {args:?}");
-    }
-    println!(
-        "Hello {} (from icfp2006-rust-adventure)!",
-        args.name.unwrap_or("world".to_string())
-    );
+
+    let mut child = run(args.interpreter.as_str(), args.vm.as_str())?;
+    let child_stdout = child.stdout.take().context("taking child stdout pipe")?;
+
+    relay(child_stdout, stdout())?;
+
+    Ok(())
 }
