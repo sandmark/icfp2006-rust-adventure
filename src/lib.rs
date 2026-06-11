@@ -3,6 +3,45 @@ use std::{
     process::{Child, Command, Stdio},
 };
 
+/// ゲームエンジンのデータ構造 ≒ switch
+enum Mode {
+    /// デフォルト
+    English,
+    /// `switch xml`
+    Xml,
+}
+
+/// 描画エンジン
+pub struct Renderer {
+    /// ゲームエンジンの出力データ構造
+    mode: Mode,
+
+    /// チャンクバッファ
+    buf: Vec<u8>,
+}
+
+impl Renderer {
+    /// デフォルト [Renderer] を返す。
+    pub fn new() -> Self {
+        Self {
+            mode: Mode::English,
+            buf: Vec::new(),
+        }
+    }
+
+    /// reader が読み取った 1 チャンクを読み、描画結果を `writer` へ出力する。
+    pub fn feed(&mut self, chunk: &[u8], writer: &mut impl Write) -> io::Result<()> {
+        match self.mode {
+            Mode::English => {
+                todo!("境界判定 -> mode 切り替え -> 前半 writer / 後半 Xml 扱い");
+            }
+            Mode::Xml => {
+                todo!("buf に追記 -> XML完結検出 -> parse -> render");
+            }
+        }
+    }
+}
+
 pub fn run(interpreter_path: &str, vm_path: &str) -> anyhow::Result<Child> {
     let child = Command::new(interpreter_path)
         .arg(vm_path)
@@ -32,6 +71,25 @@ pub fn relay(mut reader: impl Read, mut writer: impl Write) -> io::Result<u64> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    mod renderer {
+        use super::*;
+
+        #[test]
+        fn switch_xml_mode() {
+            let mut r = Renderer::new();
+            r.feed(b">: \n<success>\n  ", &mut io::sink()).unwrap();
+            assert!(matches!(r.mode, Mode::Xml));
+        }
+
+        #[test]
+        fn switch_xml_mode_splited() {
+            let mut r = Renderer::new();
+            r.feed(b">: \n<succ", &mut io::sink()).unwrap();
+            r.feed(b"ess>\n", &mut io::sink()).unwrap();
+            assert!(matches!(r.mode, Mode::Xml));
+        }
+    }
 
     mod relay {
         use super::relay;
