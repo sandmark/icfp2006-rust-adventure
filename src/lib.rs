@@ -3,6 +3,9 @@ use std::{
     process::{Child, Command, Stdio},
 };
 
+/// XML 開始マーカー
+const MARKER: &[u8] = b"<success>\n";
+
 /// ゲームエンジンのデータ構造 ≒ switch
 enum Mode {
     /// デフォルト
@@ -33,13 +36,40 @@ impl Renderer {
     pub fn feed(&mut self, chunk: &[u8], writer: &mut impl Write) -> io::Result<()> {
         match self.mode {
             Mode::English => {
-                todo!("境界判定 -> mode 切り替え -> 前半 writer / 後半 Xml 扱い");
+                self.buf.extend_from_slice(chunk);
+                match find_subslice(&self.buf, MARKER) {
+                    Some(pos) => {
+                        // marker より前は素通し
+                        writer.write_all(&self.buf[..pos])?;
+                        writer.flush()?;
+
+                        // marker から後ろ (marker自体を含む) は XML.
+                        // 残りを XML 用バッファとして持ち越し mode を切り替え。
+                        let rest = self.buf.split_off(pos);
+                        self.buf = rest;
+                        self.mode = Mode::Xml;
+                    }
+                    None => {
+                        // 見つからないが末尾は marker の途中かもしれない。
+                        // 途中は最大 MARKER.len() - 1 バイト。それだけ保持して残りを素通し。
+                        let keep = (MARKER.len() - 1).min(self.buf.len());
+                        let emit = self.buf.len() - keep;
+                        writer.write_all(&self.buf[..emit])?;
+                        writer.flush()?;
+                        self.buf.drain(..emit);
+                    }
+                }
+                Ok(())
             }
             Mode::Xml => {
                 todo!("buf に追記 -> XML完結検出 -> parse -> render");
             }
         }
     }
+}
+
+fn find_subslice(haystack: &[u8], needle: &[u8]) -> Option<usize> {
+    haystack.windows(needle.len()).position(|w| w == needle)
 }
 
 pub fn run(interpreter_path: &str, vm_path: &str) -> anyhow::Result<Child> {
