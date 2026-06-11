@@ -28,13 +28,10 @@ fn main() -> Result<()> {
     let child_stdin = child.stdin.take().context("taking child stdin pipe")?;
 
     // UM writer: 親stdin -> 子stdin スレッド
-    let writer = thread::spawn(move || relay(stdin(), child_stdin));
+    thread::spawn(move || relay(stdin(), child_stdin));
 
     // UM reader: 子stdout -> 親stdout (mainスレッド)
     relay(child_stdout, stdout())?;
-
-    // 一方の完了を待つ
-    writer.join().expect("writer thread panicked")?;
 
     Ok(())
 }
