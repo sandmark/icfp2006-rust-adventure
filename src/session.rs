@@ -6,7 +6,7 @@ use std::{
 
 use anyhow::Context;
 
-use crate::{renderer::Renderer, scanner::Scanner};
+use crate::{command::boot_script, renderer::Renderer, scanner::Scanner};
 
 /// Session
 pub struct Session {
@@ -36,7 +36,13 @@ impl Session {
             .take()
             .context("taking child stdout pipe")?;
 
-        let child_stdin = self.child.stdin.take().context("taking child stdin pipe")?;
+        let mut child_stdin = self.child.stdin.take().context("taking child stdin pipe")?;
+
+        // Boot adventure
+        for cmd in boot_script() {
+            // TODO: ロガーが欲しい。入力が消えちゃう。
+            child_stdin.write_all(&cmd.encode())?;
+        }
 
         thread::spawn(move || relay(stdin(), child_stdin));
 

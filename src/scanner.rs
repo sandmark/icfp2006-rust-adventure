@@ -1,13 +1,7 @@
+use crate::Mode;
+
 /// XML 開始マーカー
 const MARKER: &[u8] = b"<success>\n";
-
-/// ゲームエンジンのデータ構造 ≒ switch
-enum Mode {
-    /// デフォルト
-    English,
-    /// `switch xml`
-    Xml,
-}
 
 #[derive(Debug, PartialEq)]
 pub enum Segment {
