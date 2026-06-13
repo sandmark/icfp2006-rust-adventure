@@ -17,11 +17,11 @@ impl Command {
     fn dispatch(&self) -> &str {
         match self {
             Self::Raw(s) => s,
-            Self::Switch(mode) => self.switch(mode),
+            Self::Switch(mode) => Self::switch(mode),
         }
     }
 
-    fn switch(&self, mode: &Mode) -> &str {
+    fn switch(mode: &Mode) -> &'static str {
         match mode {
             Mode::English => "switch english\n",
             Mode::Xml => "switch xml\n",
