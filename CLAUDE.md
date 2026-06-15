@@ -86,3 +86,12 @@ index, and they take precedence. In short:
 - **The user writes the `src` code.** Coach with failing tests and chat-side snippets;
   don't edit `src/` for them. (Docs/config like this file are fine to write.)
 - **VCS is `jj` (jujutsu), never `git`.** Prefer `fd` over `find`, `rg` over `grep`.
+- **Token economy: prefer MCP code tools over reading whole files.** Before reaching for
+  `Read`/`Grep`/`Glob`, ask if a semantic tool answers it cheaper:
+  - **semble** (`search`, `find_related`) — first stop for "where is X / how does Y work"
+    across this repo. Returns the relevant snippets, not whole files.
+  - **serena** (`get_symbols_overview`, `find_symbol`, `find_referencing_symbols`) —
+    symbol-level navigation; pull just the one function/struct instead of the whole file.
+  - Use these for *reading and finding*. Don't use serena's editing tools (e.g.
+    `replace_symbol_body`) on `src/` — **the user writes the code** (see above). Fall back
+    to `Read`/`rg` when a whole-file view is genuinely needed (e.g. small files, prose docs).
