@@ -1,3 +1,5 @@
+use std::fmt::Debug;
+
 use quick_xml::{Reader, events::Event};
 
 use crate::Mode;
@@ -5,7 +7,7 @@ use crate::Mode;
 /// XML 開始マーカー
 const MARKER: &[u8] = b"<success>\n";
 
-#[derive(Debug, PartialEq)]
+#[derive(PartialEq)]
 pub enum Segment {
     /// English 出力。素通し対象。
     Plain(Vec<u8>),
@@ -21,6 +23,15 @@ pub struct Scanner {
 
     /// チャンクバッファ
     buf: Vec<u8>,
+}
+
+impl Debug for Segment {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Segment::Plain(b) => write!(f, "Plain({:?})", String::from_utf8_lossy(b)),
+            Segment::Xml(b) => write!(f, "Xml({:?})", String::from_utf8_lossy(b)),
+        }
+    }
 }
 
 impl Scanner {
@@ -63,43 +74,70 @@ impl Scanner {
             Mode::Xml => {
                 self.buf.extend_from_slice(chunk);
 
+                let mut out: Vec<Segment> = Vec::new();
                 let mut depth = 0i32;
-                let mut doc_end: Option<usize> = None;
-
+                let mut cursor = 0usize; // ここ未満は処理済 & 未処理領域の先頭
+                let mut doc_start: Option<usize> = None; // XML の内側なら開始位置。でなければ None
                 {
-                    // quick-xmlのReaderはbuf全体を読むため、借用ブロックを作る。
-                    // ev_bufはquick-xmlがイベントを書き出すための作業バッファ。
                     let mut reader = Reader::from_reader(&self.buf[..]);
                     let mut ev_buf = Vec::new();
 
                     loop {
+                        // read 前の位置 = 次イベントの開始オフセット
+                        // Start で '<' の位置を控えておく
+                        let pos = reader.buffer_position() as usize;
                         match reader.read_event_into(&mut ev_buf) {
                             Ok(Event::Start(_)) => {
+                                if depth == 0 {
+                                    // 文書開始
+                                    if pos > cursor {
+                                        // 直前までの depth 0 バイトはXMLではない -> Plain
+                                        out.push(Segment::Plain(self.buf[cursor..pos].to_vec()));
+                                    }
+                                    cursor = pos;
+                                    doc_start = Some(pos); // '<' の位置
+                                }
                                 depth += 1;
                             }
                             Ok(Event::End(_)) => {
                                 depth -= 1;
+                                if depth == 0 {
+                                    // 文書完結。 read した後の位置 = '>' の直後 = 終端。
+                                    let end = reader.buffer_position() as usize;
+                                    if let Some(start) = doc_start.take() {
+                                        out.push(Segment::Xml(self.buf[start..end].to_vec()));
+                                        cursor = end;
+                                    }
+                                }
                             }
-                            Ok(Event::Eof) => break, // buf 走査完了 (xml doc未完成の可能性あり)
-                            Ok(_) => { /* Text, Empty */ }
-                            Err(_) => break, // TODO: 一時的。あとで直す
-                        }
-
-                        if depth == 0 {
-                            doc_end = Some(reader.buffer_position() as usize); // 1 文書
-                            break;
+                            Ok(Event::Eof) => break, // 走査完了。未完成文書の可能性あり
+                            Ok(_) => { /* Text, Empty: depth0 は末尾で処理 */ }
+                            Err(_) => break, // TODO: Stage3
                         }
                     }
-                } // reader dropped
+                } // reader drop
 
-                // XML が完結したか？
-                match doc_end {
-                    Some(end) => {
-                        let doc = self.buf[..end].to_vec(); // 1文書ぶんを切り出し
-                        self.buf.drain(..end); // 残りは持ち越し
-                        vec![Segment::Xml(doc)]
+                match doc_start {
+                    // 文書が開いたまま終わった = 未完成。完成した分は out へ。残りは持ち越し。
+                    Some(_) => {
+                        self.buf.drain(..cursor);
+                        out
                     }
-                    None => Vec::new(), // まだ完結していない → 次のfeedへ
+                    None => {
+                        if out.is_empty() {
+                            // 文書ゼロ = 純粋な Plain
+                            let plain: Vec<u8> = self.buf.drain(..).collect();
+                            if plain.is_empty() {
+                                Vec::new()
+                            } else {
+                                vec![Segment::Plain(plain)]
+                            }
+                        } else {
+                            // 文書のあとに残った depth 0 バイト(改行など)は次のfeedへ持ち越し
+                            self.buf.drain(..cursor);
+                            out
+                        }
+                    }
                 }
             }
         }
@@ -113,6 +151,41 @@ fn find_subslice(haystack: &[u8], needle: &[u8]) -> Option<usize> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    // Xml モードで報酬コード(深さ0のバイト)だけが届いたら、
+    // 文書を待たずに [Plain] として即吐き出す。
+    #[test]
+    fn emits_reward_code_as_plain_without_document() {
+        let mut s = Scanner::new();
+
+        // 下準備: Xml モードに入り buf を空にする
+        s.feed(b"<success>\n</success>");
+        s.feed(b"");
+
+        // 報酬コードのみ。
+        let reward = b"ADVTR.INC=5@999999|f95731ab88952dfa4cb326fb99c085f\n";
+        assert_eq!(s.feed(reward), vec![Segment::Plain(reward.to_vec())]);
+    }
+
+    // Xml モードで報酬コードのあとに完結した文書が続いたら、
+    // 1回の feed で [Plain, Xml] を順番どおり返す。
+    #[test]
+    fn returns_plain_and_xml_when_reward_code_precedes_document() {
+        let mut s = Scanner::new();
+
+        s.feed(b"<success>\n</success>");
+        s.feed(b"");
+        assert!(matches!(s.mode, Mode::Xml));
+
+        let input = b"ADVTR.INC=5@999999|f95731ab88952dfa4cb326fb99c085f\n<success></success>";
+        assert_eq!(
+            s.feed(input),
+            vec![
+                Segment::Plain(b"ADVTR.INC=5@999999|f95731ab88952dfa4cb326fb99c085f\n".to_vec()),
+                Segment::Xml(b"<success></success>".to_vec()),
+            ]
+        );
+    }
+
     // Mode::Xml で分割された XML 文書が渡ってきたときは Segment::Xml を返す。
     #[test]
     fn returns_single_xml_segment_for_chunked_document() {
