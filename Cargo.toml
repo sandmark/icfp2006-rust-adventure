@@ -12,3 +12,4 @@ version = "0.1.0"
 anyhow = "1.0.102"
 clap = { version = "4.3.14", features = ["derive"] }
 quick-xml = "0.40.1"
+roxmltree = "0.21.1"

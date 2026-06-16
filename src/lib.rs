@@ -1,4 +1,5 @@
 mod command;
+mod parser;
 mod renderer;
 mod scanner;
 pub mod session;
