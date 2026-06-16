@@ -1,4 +1,4 @@
-use anyhow::{Result, bail};
+use anyhow::{Context, Result, bail};
 use roxmltree::Node;
 
 /// DOM: アイテムの説明
@@ -14,6 +14,41 @@ enum Adjective {
     Red,
     Green,
     Other(String),
+}
+
+/// DOM: アイテムの状態
+#[derive(Debug, PartialEq)]
+enum Condition {
+    Pristine,
+    Broken(Broken),
+}
+
+/// DOM: 壊れたアイテムと必要な依存関係
+#[derive(Debug, PartialEq)]
+struct Broken {
+    condition: Box<Condition>,
+    missing: Vec<Kind>,
+}
+
+#[derive(Debug, PartialEq)]
+struct Kind {
+    name: String,
+    condition: Condition,
+}
+
+impl Broken {
+    fn new(condition: Condition, missing: Vec<Kind>) -> Self {
+        Self {
+            condition: Box::new(condition),
+            missing,
+        }
+    }
+}
+
+impl Kind {
+    fn new(name: String, condition: Condition) -> Self {
+        Self { name, condition }
+    }
 }
 
 fn parse_description(node: Node) -> Result<Description> {
@@ -46,11 +81,124 @@ fn parse_adjectives(node: Node) -> Result<Vec<Adjective>> {
         .collect::<Result<Vec<_>>>()
 }
 
+fn parse_condition(node: Node) -> Result<Condition> {
+    let child = node
+        .first_element_child()
+        .context("taking first element of condition")?;
+
+    match child.tag_name().name() {
+        "pristine" => Ok(Condition::Pristine),
+        "broken" => {
+            let condition_node = child
+                .children()
+                .find(|n| n.has_tag_name("condition"))
+                .context("no condition tag in broken")?;
+            let missing_node = child
+                .children()
+                .find(|n| n.has_tag_name("missing"))
+                .context("no missing tag in broken")?;
+            let condition = parse_condition(condition_node)?;
+            let missing = parse_missing(missing_node)?;
+            Ok(Condition::Broken(Broken::new(condition, missing)))
+        }
+        _ => bail!("malformed condition inner"),
+    }
+}
+
+fn parse_kind(node: Node) -> Result<Kind> {
+    let name_node = node
+        .children()
+        .find(|n| n.has_tag_name("name"))
+        .context("kind without inner name")?;
+    let condition_node = node
+        .children()
+        .find(|n| n.has_tag_name("condition"))
+        .context("kind without inner condition")?;
+    let condition = parse_condition(condition_node)?;
+    let name = name_node.text().unwrap_or_default().trim().to_owned();
+
+    Ok(Kind { name, condition })
+}
+
+fn parse_missing(node: Node) -> Result<Vec<Kind>> {
+    node.children()
+        .filter(|n| n.is_element())
+        .map(parse_kind)
+        .collect::<Result<Vec<_>>>()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use roxmltree::Document;
 
+    mod kind {
+        use super::*;
+
+        // 正常系: <missing> 内の <kind> 群 → Vec<Kind>（複数）
+        #[test]
+        fn test_missing_collects_kinds() {
+            let input = "<missing>\n <kind><name>transistor</name><condition><pristine></pristine></condition></kind>\n <kind><name>antenna</name><condition><pristine></pristine></condition></kind>\n </missing>";
+            let doc = Document::parse(input).unwrap();
+
+            assert_eq!(
+                parse_missing(doc.root_element()).unwrap(),
+                vec![
+                    Kind {
+                        name: String::from("transistor"),
+                        condition: Condition::Pristine
+                    },
+                    Kind {
+                        name: String::from("antenna"),
+                        condition: Condition::Pristine
+                    },
+                ]
+            );
+        }
+
+        // 正常系: <kind> は name と condition を持つ → Kind に落ちる
+        #[test]
+        fn test_kind() {
+            let input = "<kind>\n<name>antenna</name>\n<condition><pristine></pristine></condition>\n</kind>";
+            let doc = Document::parse(input).unwrap();
+
+            assert_eq!(
+                parse_kind(doc.root_element()).unwrap(),
+                Kind {
+                    name: String::from("antenna"),
+                    condition: Condition::Pristine,
+                }
+            );
+        }
+    }
+    mod condition {
+        use super::*;
+
+        #[test]
+        fn test_broken() {
+            let input = "<condition><broken>\n  <condition><pristine></pristine></condition>\n  <missing>\n<kind>\n<name>\nantenna</name>\n<condition>\n<pristine></pristine>\n</condition>\n</kind>\n</missing>\n</broken>\n</condition>\n";
+            let doc = Document::parse(input).unwrap();
+
+            assert_eq!(
+                parse_condition(doc.root_element()).unwrap(),
+                Condition::Broken(Broken {
+                    condition: Box::new(Condition::Pristine),
+                    missing: vec![Kind::new("antenna".into(), Condition::Pristine)]
+                })
+            );
+        }
+
+        #[test]
+        fn test_pristine() {
+            let input = "\n<condition> <pristine> </pristine></condition>";
+            let doc = Document::parse(input).unwrap();
+
+            assert_eq!(
+                parse_condition(doc.root_element()).unwrap(),
+                Condition::Pristine
+            );
+        }
+    }
     mod adjectives {
         use super::*;
 
@@ -139,7 +287,6 @@ mod tests {
             }
         }
     }
-
     mod description {
         use super::*;
 
