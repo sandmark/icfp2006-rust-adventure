@@ -1,3 +1,37 @@
+//! # XML Parser
+//!
+//! XML 構造そのままだと縦長になるので便宜上 edn 形式で記述している。
+//!
+//! ## `switch xml`
+//! ```text
+//! {:success
+//!  {:command
+//!   {:switch "XML"}}}
+//! ```
+//!
+//! ## `examine` (`go north`)
+//!
+//! ```text
+//! {:success
+//!  {:command
+//!   {:go
+//!    {:room
+//!     {:name "Room With a Door"
+//!      :description "You are in a room with a mechanical door. You will probably need to use a keypad to unlock it. A hallway leads north."
+//!      :items
+//!       [{:item
+//!         {:name "pamphlet"
+//!          :description "standard municipal fare. It reads, The City of Chicago's Refuse and Recycling Program combines modern trash classification with cybernetic labor to keep our city beautiful, while at the same time minimizing waste and limiting consumer spending. In keeping with our motto of "One Resident's Trash Is Another Resident's Treasure," unwanted items are collected, repaired, and redistributed to other residents who would have purchased them anyway. Residents should contribute to the city's program by leaving heaps of items unwanted on the sidewalk on collection day"
+//!          :adjectives []
+//!          :condition :pristine
+//!          :piled_on
+//!           [{:item
+//!             {:name "manifesto"
+//!              :description :redacted
+//!              :adjectives []
+//!              :condition :pristine
+//!              :piled_on []
+//! ```
 use anyhow::{Context, Result, bail};
 use roxmltree::Node;
 
