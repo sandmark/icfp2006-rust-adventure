@@ -234,8 +234,26 @@ fn parse_missing(node: Node) -> Result<Vec<Kind>> {
         .collect::<Result<Vec<_>>>()
 }
 
-fn parse(bytes: &[u8]) -> Result<Response> {
-    let doc = Document::parse(str::from_utf8(bytes)?).context("parsing xml from bytes")?;
+fn sanitize_help(text: &str) -> Result<String> {
+    let inner = text
+        .strip_prefix("<help>")
+        .and_then(|s| s.strip_suffix("</help>"))
+        .context("malformed <help> tags")?
+        .trim();
+    let escaped = inner.replace('<', "&lt;").replace('>', "&gt;");
+    Ok(format!("<help>{escaped}</help>"))
+}
+
+pub fn parse(bytes: &[u8]) -> Result<Response> {
+    let text = str::from_utf8(bytes)?.trim();
+
+    let xml = if text.starts_with("<help>") {
+        sanitize_help(text)?
+    } else {
+        text.to_owned()
+    };
+
+    let doc = Document::parse(&xml).context("parsing xml from bytes")?;
     parse_response(doc.root_element())
 }
 
@@ -245,6 +263,16 @@ mod tests {
 
     mod entry {
         use super::*;
+
+        // <help> に含まれる `<command>` をタグとしてパースしない
+        #[test]
+        fn test_help_command() {
+            let bytes = b"<help>\nTry 'help <command>'\n</help>";
+            assert_eq!(
+                parse(bytes).unwrap(),
+                Response::Help("Try 'help <command>'".to_owned())
+            );
+        }
 
         // 正常系: bytes を str→Document 化し、root から Response を組む（ここでは error 経路）
         #[test]
