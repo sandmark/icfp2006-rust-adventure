@@ -33,7 +33,7 @@
 //!              :piled_on []
 //! ```
 use anyhow::{Context, Result, bail};
-use roxmltree::Node;
+use roxmltree::{Document, Node};
 
 /// DOM: アイテムの説明
 #[derive(Debug, PartialEq)]
@@ -70,6 +70,18 @@ struct Kind {
     condition: Condition,
 }
 
+#[derive(Debug, PartialEq)]
+enum Command {
+    Switch(String),
+}
+
+#[derive(Debug, PartialEq)]
+enum Response {
+    Success(Command),
+    Error(String),
+    Help(String),
+}
+
 impl Broken {
     fn new(condition: Condition, missing: Vec<Kind>) -> Self {
         Self {
@@ -82,6 +94,67 @@ impl Broken {
 impl Kind {
     fn new(name: String, condition: Condition) -> Self {
         Self { name, condition }
+    }
+}
+
+/// - switch
+/// ```text
+/// {:command {:switch string?}}
+/// ```
+fn parse_command(node: Node) -> Result<Command> {
+    let child = node.first_element_child().context("empty command tag")?;
+    match child.tag_name().name() {
+        "switch" => Ok(Command::Switch(
+            child
+                .text()
+                .context("empty switch result")?
+                .trim()
+                .to_owned(),
+        )),
+        other => bail!("TODO: {other}"),
+    }
+}
+
+/// - error
+/// ```text
+/// {:error
+///  {:response string?}}
+/// ```
+///
+/// - help
+/// ```text
+/// {:help string?}
+/// ```
+///
+/// - success
+/// ```text
+/// {:success
+///  {:command
+///   {:switch string?}}}
+/// ```
+fn parse_response(node: Node) -> Result<Response> {
+    match node.tag_name().name() {
+        "error" => Ok(Response::Error(
+            node.children()
+                .find(|n| n.has_tag_name("response"))
+                .context("error has no response")?
+                .text()
+                .context("response has no text")?
+                .trim()
+                .to_owned(),
+        )),
+        "help" => Ok(Response::Help(
+            node.text().context("no message in help")?.trim().to_owned(),
+        )),
+        "success" => {
+            let command_node = node
+                .children()
+                .find(|n| n.has_tag_name("command"))
+                .context("success has no command")?;
+            let command = parse_command(command_node)?;
+            Ok(Response::Success(command))
+        }
+        other => bail!("unknown response: {other}"),
     }
 }
 
@@ -161,11 +234,76 @@ fn parse_missing(node: Node) -> Result<Vec<Kind>> {
         .collect::<Result<Vec<_>>>()
 }
 
+fn parse(bytes: &[u8]) -> Result<Response> {
+    let doc = Document::parse(str::from_utf8(bytes)?).context("parsing xml from bytes")?;
+    parse_response(doc.root_element())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
-    use roxmltree::Document;
 
+    mod entry {
+        use super::*;
+
+        // 正常系: bytes を str→Document 化し、root から Response を組む（ここでは error 経路）
+        #[test]
+        fn test_bytes() {
+            let bytes = b"<error><response>Huh?</response></error>";
+            assert_eq!(parse(bytes).unwrap(), Response::Error("Huh?".to_owned()));
+        }
+    }
+    mod response {
+        use super::*;
+
+        // 正常系: <help> 直下のテキストを trim して Response::Help に
+        #[test]
+        fn test_help() {
+            let input = "<help>\n  examine: Inspect an item or your environment. Synonyms include ex, x, look, and l.\n </help>";
+            let doc = Document::parse(input).unwrap();
+            assert_eq!(
+                parse_response(doc.root_element()).unwrap(),
+                Response::Help("examine: Inspect an item or your environment. Synonyms include ex, x, look, and l.".to_owned())
+            );
+        }
+
+        // 正常系: <error> 内の <response> テキストを trim して Response::Error に
+        #[test]
+        fn test_error() {
+            let input = "<error> <response>\nHuh? Try 'help'.\n</response></error>";
+            let doc = Document::parse(input).unwrap();
+            assert_eq!(
+                parse_response(doc.root_element()).unwrap(),
+                Response::Error("Huh? Try 'help'.".to_owned())
+            );
+        }
+
+        // 正常系: <success> → <command> → <switch> を辿り Response::Success(Command::Switch) に
+        #[test]
+        fn test_success() {
+            let input = "\n<success>\n <command>\n<switch>XML</switch></command></success>";
+            let doc = Document::parse(input).unwrap();
+            assert_eq!(
+                parse_response(doc.root_element()).unwrap(),
+                Response::Success(Command::Switch("XML".to_owned()))
+            );
+        }
+    }
+    mod command {
+        use super::*;
+
+        // 正常系: <command> 直下の <switch> テキストを trim して Command::Switch に
+        #[test]
+        fn test_switch() {
+            let input = "\n<command>\n<switch>\n XML\n</switch></command>";
+            let doc = Document::parse(input).unwrap();
+
+            assert_eq!(
+                parse_command(doc.root_element()).unwrap(),
+                Command::Switch("XML".to_owned())
+            );
+        }
+    }
     mod kind {
         use super::*;
 
