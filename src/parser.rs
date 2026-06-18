@@ -71,12 +71,12 @@ struct Kind {
 }
 
 #[derive(Debug, PartialEq)]
-enum Command {
+pub enum Command {
     Switch(String),
 }
 
 #[derive(Debug, PartialEq)]
-enum Response {
+pub enum Response {
     Success(Command),
     Error(String),
     Help(String),
