@@ -125,8 +125,17 @@ impl Scanner {
                     }
                     None => {
                         if out.is_empty() {
-                            // 文書ゼロ = 純粋な Plain
-                            let plain: Vec<u8> = self.buf.drain(..).collect();
+                            // この feed では文書が一つも始まっていない。末尾が未完成の
+                            // タグ('<' 以降に '>' が来ていない)なら、次の feed へ持ち越す。
+                            // 最初の '<' より前だけが純粋な depth0 バイト = Plain。
+                            // '<' が無ければ従来どおり全部 Plain。
+                            // NOTE: depth0 に裸の '<'(タグでないテキスト)は来ない前提。
+                            let split = self
+                                .buf
+                                .iter()
+                                .position(|&b| b == b'<')
+                                .unwrap_or(self.buf.len());
+                            let plain: Vec<u8> = self.buf.drain(..split).collect();
                             if plain.is_empty() {
                                 Vec::new()
                             } else {
@@ -151,6 +160,27 @@ fn find_subslice(haystack: &[u8], needle: &[u8]) -> Option<usize> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    // 正常系(現状 RED): エンジンは1〜数バイトずつ吐く。Xml モードはその小刻みな
+    // 入力でも、文書を1つの Segment::Xml に組み直すべき。
+    #[test]
+    fn xml_mode_reassembles_byte_dribbled_document() {
+        let mut s = Scanner::new();
+        // Xml モードへ入り、buf を空にする
+        s.feed(b"<success>\n</success>");
+        s.feed(b"");
+
+        let doc = b"<error>\n  <response>\n    Huh? Try 'help'.\n </response>\n</error>";
+
+        // エンジンの小刻み write を再現: 1 バイトずつ feed する
+        let mut segs: Vec<Segment> = Vec::new();
+        for b in doc {
+            segs.extend(s.feed(&[*b]));
+        }
+
+        assert_eq!(segs, vec![Segment::Xml(doc.to_vec())]);
+    }
+
     // Xml モードで報酬コード(深さ0のバイト)だけが届いたら、
     // 文書を待たずに [Plain] として即吐き出す。
     #[test]
