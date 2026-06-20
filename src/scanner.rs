@@ -161,6 +161,18 @@ fn find_subslice(haystack: &[u8], needle: &[u8]) -> Option<usize> {
 mod tests {
     use super::*;
 
+    // 正常系(現状 RED): help の散文に裸の '<'(`help <command>`)が入る。
+    // 整形式 XML ではないが、応答は <help>…</help> 一塊として取り出せるべき。
+    #[test]
+    fn frames_help_with_bare_lt_in_text() {
+        let mut s = Scanner::new();
+        s.feed(b"<success>\n</success>");
+        s.feed(b"");
+
+        let doc = b"<help>\n  You can go. Try 'help <command>' for details.\n</help>";
+        assert_eq!(s.feed(doc), vec![Segment::Xml(doc.to_vec())]);
+    }
+
     // 正常系(現状 RED): エンジンは1〜数バイトずつ吐く。Xml モードはその小刻みな
     // 入力でも、文書を1つの Segment::Xml に組み直すべき。
     #[test]
