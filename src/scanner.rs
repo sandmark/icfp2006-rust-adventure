@@ -80,33 +80,44 @@ impl Scanner {
                 let mut doc_start: Option<usize> = None; // XML の内側なら開始位置。でなければ None
                 {
                     let mut reader = Reader::from_reader(&self.buf[..]);
+                    // 散文中の裸 '<'(help の `<command>` 等)で末尾タグ名が食い違っても
+                    // quick-xml を転ばせない。枠取りは外タグ名だけで行う。
+                    reader.config_mut().check_end_names = false;
                     let mut ev_buf = Vec::new();
+                    let mut outer: Option<Vec<u8>> = None; // 最上位タグ名
 
                     loop {
                         // read 前の位置 = 次イベントの開始オフセット
-                        // Start で '<' の位置を控えておく
                         let pos = reader.buffer_position() as usize;
                         match reader.read_event_into(&mut ev_buf) {
-                            Ok(Event::Start(_)) => {
+                            Ok(Event::Start(e)) => {
                                 if depth == 0 {
-                                    // 文書開始
+                                    // 文書開始。外タグ名を控える。
                                     if pos > cursor {
                                         // 直前までの depth 0 バイトはXMLではない -> Plain
                                         out.push(Segment::Plain(self.buf[cursor..pos].to_vec()));
                                     }
                                     cursor = pos;
                                     doc_start = Some(pos); // '<' の位置
+                                    outer = Some(e.name().as_ref().to_vec());
+                                    depth += 1;
+                                } else if outer.as_deref() == Some(e.name().as_ref()) {
+                                    // 外と同名の入れ子だけ数える(実データでは稀)
+                                    depth += 1;
                                 }
-                                depth += 1;
+                                // 内側の別名タグ(散文中の <command> 含む)は数えない
                             }
-                            Ok(Event::End(_)) => {
-                                depth -= 1;
-                                if depth == 0 {
-                                    // 文書完結。 read した後の位置 = '>' の直後 = 終端。
-                                    let end = reader.buffer_position() as usize;
-                                    if let Some(start) = doc_start.take() {
-                                        out.push(Segment::Xml(self.buf[start..end].to_vec()));
-                                        cursor = end;
+                            Ok(Event::End(e)) => {
+                                if outer.as_deref() == Some(e.name().as_ref()) {
+                                    depth -= 1;
+                                    if depth == 0 {
+                                        // 文書完結。 read した後の位置 = '>' の直後 = 終端。
+                                        let end = reader.buffer_position() as usize;
+                                        if let Some(start) = doc_start.take() {
+                                            out.push(Segment::Xml(self.buf[start..end].to_vec()));
+                                            cursor = end;
+                                        }
+                                        outer = None;
                                     }
                                 }
                             }
