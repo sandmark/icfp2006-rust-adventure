@@ -111,7 +111,10 @@ fn parse_command(node: Node) -> Result<Command> {
                 .trim()
                 .to_owned(),
         )),
-        other => bail!("TODO: {other}"),
+        other => {
+            let src = &child.document().input_text()[child.range()];
+            bail!("NOT IMPLEMENTED: {other}\n{src}");
+        }
     }
 }
 
@@ -319,6 +322,18 @@ mod tests {
     }
     mod command {
         use super::*;
+
+        // 異常系: 未実装コマンドはタグ名だけでなく元 XML 片をエラーに載せる
+        #[test]
+        fn test_unimplemented_command_dumps_xml() {
+            let input = "<command><test_command><room>x</room></test_command></command>";
+            let doc = Document::parse(input).unwrap();
+            let msg = format!("{}", parse_command(doc.root_element()).unwrap_err());
+            assert_eq!(
+                msg,
+                "NOT IMPLEMENTED: test_command\n<test_command><room>x</room></test_command>"
+            );
+        }
 
         // 正常系: <command> 直下の <switch> テキストを trim して Command::Switch に
         #[test]
