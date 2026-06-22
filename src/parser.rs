@@ -32,12 +32,14 @@
 //!              :condition :pristine
 //!              :piled_on []
 //! ```
+use std::fmt::Display;
+
 use anyhow::{Context, Result, bail};
 use roxmltree::{Document, Node};
 
 /// DOM: アイテムの説明
 #[derive(Debug, PartialEq)]
-enum Description {
+pub enum Description {
     Text(String),
     Redacted,
 }
@@ -73,6 +75,7 @@ struct Kind {
 #[derive(Debug, PartialEq)]
 pub enum Command {
     Switch(String),
+    Look(Room),
 }
 
 #[derive(Debug, PartialEq)]
@@ -84,19 +87,19 @@ pub enum Response {
 }
 
 #[derive(Debug, PartialEq)]
-struct Item {
-    name: String,
-    description: Description,
-    adjectives: Vec<Adjective>,
-    condition: Condition,
-    piled_on: Option<Box<Item>>,
+pub struct Item {
+    pub name: String,
+    pub description: Description,
+    pub adjectives: Vec<Adjective>,
+    pub condition: Condition,
+    pub piled_on: Option<Box<Item>>,
 }
 
 #[derive(Debug, PartialEq)]
-struct Room {
-    name: String,
-    description: Description,
-    items: Vec<Item>,
+pub struct Room {
+    pub name: String,
+    pub description: Description,
+    pub items: Vec<Item>,
 }
 
 impl Broken {
@@ -142,6 +145,96 @@ impl Room {
     }
 }
 
+// --------------------------------------------------
+// impl Display
+// --------------------------------------------------
+
+impl Display for Description {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Description::Text(s) => write!(f, "{s}"),
+            Description::Redacted => write!(f, "[検閲]"),
+        }
+    }
+}
+
+impl Display for Adjective {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Adjective::Red => write!(f, "red"),
+            Adjective::Green => write!(f, "green"),
+            Adjective::Other(color) => write!(f, "other({color})"),
+        }
+    }
+}
+
+impl Display for Condition {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Condition::Pristine => write!(f, "無傷"),
+            Condition::Broken(b) => write!(f, "{}", b),
+        }
+    }
+}
+
+impl Display for Kind {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}({})", self.name, self.condition)
+    }
+}
+
+impl Display for Broken {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let kinds = self
+            .missing
+            .iter()
+            .map(|k| k.to_string())
+            .collect::<Vec<String>>()
+            .join(", ");
+        write!(f, "破損({}にする材料: {})", self.condition, kinds)
+    }
+}
+
+impl Display for Item {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let adjectives = if self.adjectives.is_empty() {
+            "なし"
+        } else {
+            &self
+                .adjectives
+                .iter()
+                .map(|a| a.to_string())
+                .collect::<Vec<String>>()
+                .join(", ")
+        };
+        write!(
+            f,
+            "{}: \"{}\"\n  特徴: {}\n  状態: {}",
+            self.name, self.description, adjectives, self.condition
+        )
+    }
+}
+
+impl Display for Room {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let items = self
+            .items
+            .iter()
+            .map(|i| i.to_string())
+            .collect::<Vec<String>>()
+            .join("\n");
+        write!(
+            f,
+            "--- {} ---\n{}\n\n{}",
+            self.name, self.description, items
+        )
+    }
+}
+
+// --------------------------------------------------
+// Parser
+// --------------------------------------------------
+
 /// - switch
 /// ```text
 /// {:command {:switch string?}}
@@ -156,6 +249,9 @@ fn parse_command(node: Node) -> Result<Command> {
                 .trim()
                 .to_owned(),
         )),
+        "look" => Ok(Command::Look(parse_room(
+            child.first_element_child().context("look: no room tag")?,
+        )?)),
         other => {
             let src = &child.document().input_text()[child.range()];
             bail!("NOT IMPLEMENTED: {other}\n{src}");
@@ -430,6 +526,109 @@ fn parse_room(node: Node) -> Result<Room> {
 mod tests {
     use super::*;
 
+    mod display {
+        use super::*;
+
+        #[test]
+        fn test_description() {
+            assert_eq!(Description::Redacted.to_string(), "[検閲]");
+            assert_eq!(Description::Text("TEXT".to_owned()).to_string(), "TEXT");
+        }
+
+        #[test]
+        fn test_adjective() {
+            assert_eq!(Adjective::Red.to_string(), "red");
+            assert_eq!(
+                Adjective::Other("color".to_owned()).to_string(),
+                "other(color)"
+            );
+        }
+
+        #[test]
+        fn test_condition() {
+            assert_eq!(Condition::Pristine.to_string(), "無傷");
+        }
+
+        #[test]
+        fn test_kind() {
+            assert_eq!(
+                Kind::new("test".to_owned(), Condition::Pristine).to_string(),
+                "test(無傷)"
+            );
+        }
+
+        #[test]
+        fn test_broken_to_pristine() {
+            assert_eq!(
+                Broken::new(
+                    Condition::Pristine,
+                    vec![Kind::new("test".to_owned(), Condition::Pristine)]
+                )
+                .to_string(),
+                "破損(無傷にする材料: test(無傷))"
+            );
+            assert_eq!(
+                Broken::new(
+                    Condition::Pristine,
+                    vec![
+                        Kind::new("foo".to_owned(), Condition::Pristine),
+                        Kind::new("bar".to_owned(), Condition::Pristine)
+                    ]
+                )
+                .to_string(),
+                "破損(無傷にする材料: foo(無傷), bar(無傷))"
+            );
+        }
+
+        #[test]
+        fn test_broken_to_broken() {
+            assert_eq!(
+                Broken::new(
+                    Condition::Broken(Broken::new(
+                        Condition::Pristine,
+                        vec![Kind::new("transistor".to_owned(), Condition::Pristine)]
+                    )),
+                    vec![Kind::new("radio".to_owned(), Condition::Pristine)]
+                )
+                .to_string(),
+                "破損(破損(無傷にする材料: transistor(無傷))にする材料: radio(無傷))"
+            );
+        }
+
+        #[test]
+        fn test_item() {
+            assert_eq!(
+                Item::new(
+                    "foo".to_owned(),
+                    Description::Redacted,
+                    vec![],
+                    Condition::Pristine,
+                    None
+                )
+                .to_string(),
+                "foo: \"[検閲]\"\n  特徴: なし\n  状態: 無傷"
+            )
+        }
+
+        #[test]
+        fn test_room() {
+            assert_eq!(
+                Room::new(
+                    "testroom".to_owned(),
+                    Description::Redacted,
+                    vec![Item::new(
+                        "foo".to_owned(),
+                        Description::Redacted,
+                        vec![],
+                        Condition::Pristine,
+                        None
+                    ),]
+                )
+                .to_string(),
+                "--- testroom ---\n[検閲]\n\nfoo: \"[検閲]\"\n  特徴: なし\n  状態: 無傷"
+            )
+        }
+    }
     mod room {
         use super::*;
 
@@ -445,7 +644,6 @@ mod tests {
             assert_eq!(room.items.len(), 2);
         }
     }
-
     mod item {
         use super::*;
 
@@ -650,6 +848,18 @@ mod tests {
                 parse_command(doc.root_element()).unwrap(),
                 Command::Switch("XML".to_owned())
             );
+        }
+
+        // 正常系: look
+        #[test]
+        fn test_look() {
+            let input = "<command><look> <room> <name> Room With a Door </name> <description> You are in a room with a mechanical door. You will probably need to use a keypad to unlock it. A hallway leads north. </description> <items> <item> <name> pamphlet </name> <description> standard municipal fare. It reads, The City of Chicago's Refuse and Recycling Program combines modern trash classification with cybernetic labor to keep our city beautiful, while at the same time minimizing waste and limiting consumer spending. In keeping with our motto of \"One Resident's Trash Is Another Resident's Treasure,\" unwanted items are collected, repaired, and redistributed to other residents who would have purchased them anyway. Residents should contribute to the city's program by leaving heaps of items unwanted on the sidewalk on collection day </description> <adjectives> </adjectives> <condition> <pristine> </pristine> </condition> <piled_on> <item> <name> manifesto </name> <description> <redacted/> </description> <adjectives> </adjectives> <condition> <pristine> </pristine> </condition> <piled_on> </piled_on> </item> </piled_on> </item> </items> </room> </look> </command> ";
+            let doc = Document::parse(input).unwrap();
+
+            assert!(matches!(
+                parse_command(doc.root_element()).unwrap(),
+                Command::Look(_)
+            ))
         }
     }
     mod kind {
