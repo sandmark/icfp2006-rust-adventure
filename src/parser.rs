@@ -80,6 +80,7 @@ pub enum Response {
     Success(Command),
     Error(String),
     Help(String),
+    Failed(String),
 }
 
 impl Broken {
@@ -114,6 +115,34 @@ fn parse_command(node: Node) -> Result<Command> {
         other => {
             let src = &child.document().input_text()[child.range()];
             bail!("NOT IMPLEMENTED: {other}\n{src}");
+        }
+    }
+}
+
+fn parse_response_failed(node: Node) -> Result<Response> {
+    let reason = node
+        .children()
+        .find(|n| n.has_tag_name("reason"))
+        .context("failed tag has no reason")?
+        .text()
+        .context("reason tag has no text")?
+        .trim();
+    let command = node
+        .children()
+        .find(|n| n.has_tag_name("command"))
+        .context("failed tag has no command")?
+        .first_element_child()
+        .context("command tag has no children")?;
+    match command.tag_name().name().trim() {
+        "go" => {
+            let params = command.text().unwrap_or_default().trim();
+            Ok(Response::Failed(format!(
+                "failed to `go ({params})`: {reason}\n"
+            )))
+        }
+        other => {
+            let src = &node.document().input_text()[node.range()];
+            bail!("failed to `{other}`:\n{src}\n");
         }
     }
 }
@@ -157,6 +186,7 @@ fn parse_response(node: Node) -> Result<Response> {
             let command = parse_command(command_node)?;
             Ok(Response::Success(command))
         }
+        "failed" => parse_response_failed(node),
         other => {
             let src = &node.document().input_text()[node.range()];
             bail!("unknown response: {other}\n{src}")
@@ -300,6 +330,19 @@ mod tests {
             assert_eq!(
                 msg,
                 "unknown response: unknown\n<unknown><message>unknown message</message></unknown>"
+            );
+        }
+
+        // 正常系: <failed> をパース
+        #[test]
+        fn test_failed() {
+            let input = "<failed><command><go>north</go></command><reason>there is no way north from here</reason></failed>";
+            let doc = Document::parse(input).unwrap();
+            assert_eq!(
+                parse_response(doc.root_element()).unwrap(),
+                Response::Failed(
+                    "failed to `go (north)`: there is no way north from here\n".to_string()
+                )
             );
         }
 

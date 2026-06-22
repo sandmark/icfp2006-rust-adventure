@@ -26,6 +26,7 @@ fn render_response(resp: &Response) -> String {
     match resp {
         Response::Help(s) => format!("[HELP] {s}"),
         Response::Error(s) => format!("[ERROR] {s}"),
+        Response::Failed(s) => format!("[FAILED] {s}"),
         Response::Success(_) => "".to_owned(),
     }
 }
