@@ -83,6 +83,15 @@ pub enum Response {
     Failed(String),
 }
 
+#[derive(Debug, PartialEq)]
+struct Item {
+    name: String,
+    description: Description,
+    adjectives: Vec<Adjective>,
+    condition: Condition,
+    piled_on: Option<Box<Item>>,
+}
+
 impl Broken {
     fn new(condition: Condition, missing: Vec<Kind>) -> Self {
         Self {
@@ -95,6 +104,24 @@ impl Broken {
 impl Kind {
     fn new(name: String, condition: Condition) -> Self {
         Self { name, condition }
+    }
+}
+
+impl Item {
+    fn new(
+        name: String,
+        description: Description,
+        adjectives: Vec<Adjective>,
+        condition: Condition,
+        piled_on: Option<Box<Item>>,
+    ) -> Self {
+        Self {
+            name,
+            description,
+            adjectives,
+            condition,
+            piled_on,
+        }
     }
 }
 
@@ -202,7 +229,7 @@ fn parse_description(node: Node) -> Result<Description> {
         }
     } else {
         Ok(Description::Text(
-            node.text().unwrap_or_default().to_owned(),
+            node.text().unwrap_or_default().trim().to_owned(),
         ))
     }
 }
@@ -293,10 +320,105 @@ pub fn parse(bytes: &[u8]) -> Result<Response> {
     parse_response(doc.root_element())
 }
 
+fn parse_item(node: Node) -> Result<Item> {
+    let name = node
+        .children()
+        .find(|n| n.has_tag_name("name"))
+        .context("item tag has no name")?
+        .text()
+        .context("item name is empty")?
+        .trim();
+    let description = parse_description(
+        node.children()
+            .find(|n| n.has_tag_name("description"))
+            .context("item tag has no description")?,
+    )?;
+    let adjectives = parse_adjectives(
+        node.children()
+            .find(|n| n.has_tag_name("adjectives"))
+            .context("item tag has no adjectives")?,
+    )?;
+    let condition = parse_condition(
+        node.children()
+            .find(|n| n.has_tag_name("condition"))
+            .context("item tag has no condition")?,
+    )?;
+
+    if let Some(piled_on) = node
+        .children()
+        .find(|n| n.has_tag_name("piled_on"))
+        .context("item tag has no piled_on")?
+        .first_element_child()
+    {
+        Ok(Item::new(
+            name.to_owned(),
+            description,
+            adjectives,
+            condition,
+            Some(Box::new(
+                parse_item(piled_on).context("malformed inner piled_on")?,
+            )),
+        ))
+    } else {
+        Ok(Item::new(
+            name.to_owned(),
+            description,
+            adjectives,
+            condition,
+            None,
+        ))
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
 
+    mod item {
+        use super::*;
+
+        // 積み上がった (ネストした) アイテムを構造体にする。
+        #[test]
+        fn test_item_nested() {
+            let input = "<item> <name> pamphlet </name> <description> standard municipal fare. It reads, The City of Chicago's Refuse and Recycling Program combines modern trash classification with cybernetic labor to keep our city beautiful, while at the same time minimizing waste and limiting consumer spending. In keeping with our motto of \"One Resident's Trash Is Another Resident's Treasure,\" unwanted items are collected, repaired, and redistributed to other residents who would have purchased them anyway. Residents should contribute to the city's program by leaving heaps of items unwanted on the sidewalk on collection day </description> <adjectives> </adjectives> <condition> <pristine> </pristine> </condition> <piled_on> <item> <name> manifesto </name> <description> <redacted/> </description> <adjectives> </adjectives> <condition> <pristine> </pristine> </condition> <piled_on> </piled_on> </item> </piled_on> </item>";
+            let doc = Document::parse(input).unwrap();
+            assert_eq!(
+                parse_item(doc.root_element()).unwrap(),
+                Item {
+                    name: "pamphlet".to_owned(),
+                    description: Description::Text(
+                        "standard municipal fare. It reads, The City of Chicago's Refuse and Recycling Program combines modern trash classification with cybernetic labor to keep our city beautiful, while at the same time minimizing waste and limiting consumer spending. In keeping with our motto of \"One Resident's Trash Is Another Resident's Treasure,\" unwanted items are collected, repaired, and redistributed to other residents who would have purchased them anyway. Residents should contribute to the city's program by leaving heaps of items unwanted on the sidewalk on collection day".to_owned()
+                    ),
+                    adjectives: vec![],
+                    condition: Condition::Pristine,
+                    piled_on: Some(Box::new(Item {
+                        name: "manifesto".to_owned(),
+                        description: Description::Redacted,
+                        adjectives: vec![],
+                        condition: Condition::Pristine,
+                        piled_on: None
+                    }))
+                }
+            );
+        }
+
+        // 積み上がっていないアイテムを構造体にする。
+        #[test]
+        fn test_item_on_top() {
+            let input = "<item> <name> manifesto </name> <description> <redacted/> </description> <adjectives> </adjectives> <condition> <pristine> </pristine> </condition> <piled_on> </piled_on></item>";
+            let doc = Document::parse(input).unwrap();
+            assert_eq!(
+                parse_item(doc.root_element()).unwrap(),
+                Item {
+                    name: "manifesto".to_owned(),
+                    description: Description::Redacted,
+                    adjectives: vec![],
+                    condition: Condition::Pristine,
+                    piled_on: None
+                }
+            );
+        }
+    }
     mod entry {
         use super::*;
 
