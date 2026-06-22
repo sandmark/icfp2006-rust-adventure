@@ -157,7 +157,10 @@ fn parse_response(node: Node) -> Result<Response> {
             let command = parse_command(command_node)?;
             Ok(Response::Success(command))
         }
-        other => bail!("unknown response: {other}"),
+        other => {
+            let src = &node.document().input_text()[node.range()];
+            bail!("unknown response: {other}\n{src}")
+        }
     }
 }
 
@@ -286,6 +289,19 @@ mod tests {
     }
     mod response {
         use super::*;
+
+        // 異常系: 不明なレスポンスの XML をエラーに含める
+        #[test]
+        fn test_unknown() {
+            let input = "<unknown><message>unknown message</message></unknown>";
+            let doc = Document::parse(input).unwrap();
+            let msg = format!("{}", parse_response(doc.root_element()).unwrap_err());
+
+            assert_eq!(
+                msg,
+                "unknown response: unknown\n<unknown><message>unknown message</message></unknown>"
+            );
+        }
 
         // 正常系: <help> 直下のテキストを trim して Response::Help に
         #[test]
