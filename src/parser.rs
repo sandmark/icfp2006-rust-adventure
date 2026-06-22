@@ -92,6 +92,13 @@ struct Item {
     piled_on: Option<Box<Item>>,
 }
 
+#[derive(Debug, PartialEq)]
+struct Room {
+    name: String,
+    description: Description,
+    items: Vec<Item>,
+}
+
 impl Broken {
     fn new(condition: Condition, missing: Vec<Kind>) -> Self {
         Self {
@@ -121,6 +128,16 @@ impl Item {
             adjectives,
             condition,
             piled_on,
+        }
+    }
+}
+
+impl Room {
+    fn new(name: String, description: Description, items: Vec<Item>) -> Self {
+        Self {
+            name,
+            description,
+            items,
         }
     }
 }
@@ -370,9 +387,50 @@ fn parse_item(node: Node) -> Result<Item> {
     }
 }
 
+fn parse_room(node: Node) -> Result<Room> {
+    let name = node
+        .children()
+        .find(|n| n.has_tag_name("name"))
+        .context("room tag has no name")?
+        .text()
+        .context("name tag is empty")
+        .unwrap_or_default()
+        .trim();
+    let description = parse_description(
+        node.children()
+            .find(|n| n.has_tag_name("description"))
+            .context("room tag has no description")?,
+    )?;
+    let items = node
+        .children()
+        .find(|n| n.has_tag_name("items"))
+        .context("room tag has no items")?
+        .children()
+        .filter(|n| n.has_children())
+        .map(parse_item)
+        .collect::<Result<Vec<_>>>();
+    Ok(Room::new(name.to_owned(), description, items?))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    mod room {
+        use super::*;
+
+        // 部屋の名前、詳細、アイテムすべてを [Room] にする。
+        #[test]
+        fn test_room_with_a_door() {
+            let input = " <room> <name> Room With a Door </name> <description> You are in a room with a mechanical door. You will probably need to use a keypad to unlock it. A hallway leads north. </description> <items> <item> <name> pamphlet </name> <description> standard municipal fare. It reads, The City of Chicago's Refuse and Recycling Program combines modern trash classification with cybernetic labor to keep our city beautiful, while at the same time minimizing waste and limiting consumer spending. In keeping with our motto of \"One Resident's Trash Is Another Resident's Treasure,\" unwanted items are collected, repaired, and redistributed to other residents who would have purchased them anyway. Residents should contribute to the city's program by leaving heaps of items unwanted on the sidewalk on collection day </description> <adjectives> </adjectives> <condition> <pristine> </pristine> </condition> <piled_on> <item> <name> manifesto </name> <description> <redacted/> </description> <adjectives> </adjectives> <condition> <pristine> </pristine> </condition> <piled_on> </piled_on> </item> </piled_on> </item> </items> </room>";
+            let doc = Document::parse(input).unwrap();
+            let room = parse_room(doc.root_element()).unwrap();
+
+            assert_eq!(room.name, "Room With a Door".to_owned());
+            assert_eq!(room.description, Description::Text("You are in a room with a mechanical door. You will probably need to use a keypad to unlock it. A hallway leads north.".to_owned()));
+            assert_eq!(room.items.len(), 1);
+        }
+    }
 
     mod item {
         use super::*;
