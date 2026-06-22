@@ -224,7 +224,7 @@ fn parse_kind(node: Node) -> Result<Kind> {
     let condition = parse_condition(condition_node)?;
     let name = name_node.text().unwrap_or_default().trim().to_owned();
 
-    Ok(Kind { name, condition })
+    Ok(Kind::new(name, condition))
 }
 
 fn parse_missing(node: Node) -> Result<Vec<Kind>> {
