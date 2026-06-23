@@ -181,19 +181,65 @@ impl Display for Condition {
 
 impl Display for Kind {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}({})", self.name, self.condition)
+        match &self.condition {
+            // 無傷の部品は名前だけ
+            Condition::Pristine => write!(f, "{}", self.name),
+            // 壊れた部品は「(欠けているもの)を欠いた 名前」(1段だけ前置修飾する)
+            Condition::Broken(b) => {
+                let lack = b
+                    .missing
+                    .iter()
+                    .map(|k| k.to_string())
+                    .collect::<Vec<String>>()
+                    .join("・");
+                write!(f, "{lack} を欠いた {}", self.name)
+            }
+        }
     }
 }
 
 impl Display for Broken {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let kinds = self
-            .missing
-            .iter()
-            .map(|k| k.to_string())
-            .collect::<Vec<String>>()
-            .join(", ");
-        write!(f, "破損({}にする材料: {})", self.condition, kinds)
+        write!(f, "壊れている: ")?;
+
+        // 修理の段階を、外側(今すぐの不足)から内側(その先の不足)へ歩く。
+        // NOTE: 「破損」を繰り返さず、連体修飾を入れ子にしないことで括弧の山を避ける
+        let mut cur = self;
+        let mut first = true;
+        loop {
+            let parts = cur
+                .missing
+                .iter()
+                .map(|k| k.to_string())
+                .collect::<Vec<String>>()
+                .join(", ");
+
+            match cur.condition.as_ref() {
+                // この段で無傷に届く = 連鎖の終端
+                Condition::Pristine => {
+                    return if first {
+                        write!(f, "{parts} が足りない")
+                    } else {
+                        write!(f, "{parts} を欠く")
+                    };
+                }
+                // まだ段が続く
+                Condition::Broken(next) => {
+                    if first {
+                        let pron = if cur.missing.len() == 1 {
+                            "それを"
+                        } else {
+                            "それらを"
+                        };
+                        write!(f, "{parts} が足りず、{pron}補ってもなお ")?;
+                    } else {
+                        write!(f, "{parts} を欠き、さらに ")?;
+                    }
+                    cur = next;
+                    first = false;
+                }
+            }
+        }
     }
 }
 
@@ -548,15 +594,62 @@ mod tests {
         }
 
         #[test]
-        fn test_condition() {
+        fn test_condition_pristine() {
             assert_eq!(Condition::Pristine.to_string(), "無傷");
+        }
+
+        #[test]
+        fn test_broken_missing_is_broken() {
+            // 正常系: missing の材料自体が壊れている (radio が破損)
+            assert_eq!(
+                Broken::new(
+                    Condition::Pristine,
+                    vec![Kind::new(
+                        "radio".to_owned(),
+                        Condition::Broken(Broken::new(
+                            Condition::Pristine,
+                            vec![Kind::new("antenna".to_owned(), Condition::Pristine)],
+                        )),
+                    )],
+                )
+                .to_string(),
+                "壊れている: antenna を欠いた radio が足りない"
+            );
+        }
+
+        #[test]
+        fn test_condition_broken() {
+            // 正常系: A-1920-IXB の二段階修理を style B で表示する
+            assert_eq!(
+                Condition::Broken(Broken::new(
+                    // 補充後に残る不足: transistor
+                    Condition::Broken(Broken::new(
+                        Condition::Pristine,
+                        vec![Kind::new("transistor".to_owned(), Condition::Pristine)],
+                    )),
+                    // 今すぐの不足: 壊れた radio・processor・bolt
+                    vec![
+                        Kind::new(
+                            "radio".to_owned(),
+                            Condition::Broken(Broken::new(
+                                Condition::Pristine,
+                                vec![Kind::new("antenna".to_owned(), Condition::Pristine)],
+                            )),
+                        ),
+                        Kind::new("processor".to_owned(), Condition::Pristine),
+                        Kind::new("bolt".to_owned(), Condition::Pristine),
+                    ],
+                ))
+                .to_string(),
+                "壊れている: antenna を欠いた radio, processor, bolt が足りず、それらを補ってもなお transistor を欠く"
+            );
         }
 
         #[test]
         fn test_kind() {
             assert_eq!(
                 Kind::new("test".to_owned(), Condition::Pristine).to_string(),
-                "test(無傷)"
+                "test"
             );
         }
 
@@ -568,7 +661,7 @@ mod tests {
                     vec![Kind::new("test".to_owned(), Condition::Pristine)]
                 )
                 .to_string(),
-                "破損(無傷にする材料: test(無傷))"
+                "壊れている: test が足りない"
             );
             assert_eq!(
                 Broken::new(
@@ -579,7 +672,7 @@ mod tests {
                     ]
                 )
                 .to_string(),
-                "破損(無傷にする材料: foo(無傷), bar(無傷))"
+                "壊れている: foo, bar が足りない"
             );
         }
 
@@ -594,7 +687,7 @@ mod tests {
                     vec![Kind::new("radio".to_owned(), Condition::Pristine)]
                 )
                 .to_string(),
-                "破損(破損(無傷にする材料: transistor(無傷))にする材料: radio(無傷))"
+                "壊れている: radio が足りず、それを補ってもなお transistor を欠く"
             );
         }
 
