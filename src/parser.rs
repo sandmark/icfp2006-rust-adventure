@@ -49,6 +49,7 @@ pub enum Description {
 enum Adjective {
     Red,
     Green,
+    Blue,
     Other(String),
 }
 
@@ -163,6 +164,7 @@ impl Display for Adjective {
         match self {
             Adjective::Red => write!(f, "red"),
             Adjective::Green => write!(f, "green"),
+            Adjective::Blue => write!(f, "blue"),
             Adjective::Other(color) => write!(f, "other({color})"),
         }
     }
@@ -352,6 +354,7 @@ fn parse_adjective(node: Node) -> Result<Adjective> {
     match text {
         "red" => Ok(Adjective::Red),
         "green" => Ok(Adjective::Green),
+        "blue" => Ok(Adjective::Blue),
         "" => bail!("empty adjective"),
         other => Ok(Adjective::Other(other.to_string())),
     }
@@ -1005,7 +1008,11 @@ mod tests {
         // 正常系: カタログ語は対応する variant へ (表駆動)
         #[test]
         fn test_covered_adjectives() {
-            for (input, want) in [("red", Adjective::Red), ("green", Adjective::Green)] {
+            for (input, want) in [
+                ("red", Adjective::Red),
+                ("green", Adjective::Green),
+                ("blue", Adjective::Blue),
+            ] {
                 let xml = format!("<adjective>{input}</adjective>");
                 let doc = Document::parse(&xml).unwrap();
 
