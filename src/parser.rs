@@ -423,7 +423,10 @@ fn sanitize_help(text: &str) -> Result<String> {
         .and_then(|s| s.strip_suffix("</help>"))
         .context("malformed <help> tags")?
         .trim();
-    let escaped = inner.replace('<', "&lt;").replace('>', "&gt;");
+    let escaped = inner
+        .replace('&', "&amp;")
+        .replace('<', "&lt;")
+        .replace('>', "&gt;");
     Ok(format!("<help>{escaped}</help>"))
 }
 
@@ -785,6 +788,13 @@ mod tests {
                 parse(bytes).unwrap(),
                 Response::Help("Try 'help <command>'".to_owned())
             );
+        }
+
+        // <help> に含まれる `&` をサニタイズ
+        #[test]
+        fn test_help_amp() {
+            let bytes = b"<help>\n&\n</help>";
+            assert_eq!(parse(bytes).unwrap(), Response::Help("&".to_owned()));
         }
 
         // 正常系: bytes を str→Document 化し、root から Response を組む（ここでは error 経路）
