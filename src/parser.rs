@@ -336,19 +336,13 @@ fn parse_response_failed(node: Node) -> Result<Response> {
         .find(|n| n.has_tag_name("command"))
         .context("failed tag has no command")?
         .first_element_child()
-        .context("command tag has no children")?;
-    match command.tag_name().name().trim() {
-        "go" => {
-            let params = command.text().unwrap_or_default().trim();
-            Ok(Response::Failed(format!(
-                "failed to `go ({params})`: {reason}\n"
-            )))
-        }
-        other => {
-            let src = &node.document().input_text()[node.range()];
-            bail!("failed to `{other}`:\n{src}\n");
-        }
-    }
+        .context("command tag has no children")?
+        .tag_name()
+        .name()
+        .trim();
+    Ok(Response::Failed(format!(
+        "failed to `{command}`: {reason}\n"
+    )))
 }
 
 /// - error
@@ -889,15 +883,27 @@ mod tests {
             );
         }
 
-        // 正常系: <failed> をパース
+        // 異常系: `go` failed
         #[test]
-        fn test_failed() {
+        fn test_go_failed() {
             let input = "<failed><command><go>north</go></command><reason>there is no way north from here</reason></failed>";
             let doc = Document::parse(input).unwrap();
             assert_eq!(
                 parse_response(doc.root_element()).unwrap(),
+                Response::Failed("failed to `go`: there is no way north from here\n".to_string())
+            );
+        }
+
+        // 異常系: アイテムが拾えない
+        #[test]
+        fn test_take_failed() {
+            let input = "<failed> <command> <take> <item> <name> manifesto </name> <description> <redacted/> </description> <adjectives> </adjectives> <condition> <pristine> </pristine> </condition> <piled_on> </piled_on> </item> </take> </command> <reason> there is another item on top of it (take the other item first) </reason> </failed>";
+            let doc = Document::parse(input).unwrap();
+
+            assert_eq!(
+                parse_response(doc.root_element()).unwrap(),
                 Response::Failed(
-                    "failed to `go (north)`: there is no way north from here\n".to_string()
+                    "failed to `take`: there is another item on top of it (take the other item first)\n".to_owned()
                 )
             );
         }
