@@ -31,6 +31,15 @@ fn render_response(resp: &Response) -> String {
             Command::Switch(r) => format!("`switch` mode: {r}"),
             Command::Look(r) => format!("{r}\n"),
             Command::Go(r) => format!("{r}\n"),
+            Command::Show(items) => {
+                let coll = items.iter().map(|i| i.to_string()).collect::<Vec<_>>();
+                let s = if coll.is_empty() {
+                    "何も持っていない"
+                } else {
+                    &coll.join("\n")
+                };
+                format!("--- Inventory ---\n\n{s}\n")
+            }
             other => format!("[RENDER TODO] not implemented {other:?}"),
         },
     }
@@ -44,6 +53,12 @@ mod tests {
         use crate::parser::{Description, Room};
 
         use super::*;
+
+        #[test]
+        fn renders_show_inventory() {
+            let resp = Response::Success(Command::Show(vec![]));
+            assert!(!render_response(&resp).contains("TODO"))
+        }
 
         #[test]
         fn renders_go_room() {

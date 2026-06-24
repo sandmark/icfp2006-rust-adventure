@@ -78,6 +78,7 @@ pub enum Command {
     Switch(String),
     Look(Room),
     Go(Room),
+    Show(Vec<Item>),
 }
 
 #[derive(Debug, PartialEq)]
@@ -304,6 +305,7 @@ fn parse_command(node: Node) -> Result<Command> {
         "go" => Ok(Command::Go(parse_room(
             child.first_element_child().context("look: no room tag")?,
         )?)),
+        "show" => Ok(Command::Show(parse_items(child)?)),
         other => {
             let src = &child.document().input_text()[child.range()];
             bail!("NOT IMPLEMENTED: {other}\n{src}");
@@ -972,6 +974,30 @@ mod tests {
                 parse_command(doc.root_element()).unwrap(),
                 Command::Go(_)
             ))
+        }
+
+        // 正常系: 空のインベントリ
+        #[test]
+        fn test_show_empty() {
+            let input = "<command><show> </show></command>";
+            let doc = Document::parse(input).unwrap();
+
+            assert!(matches!(
+                parse_command(doc.root_element()).unwrap(),
+                Command::Show(_)
+            ))
+        }
+
+        // 正常系: 空ではないインベントリ
+        #[test]
+        fn test_show() {
+            let input = "<command><show> <item> <name> manifesto </name> <description> <redacted/> </description> <adjectives> </adjectives> <condition> <pristine> </pristine> </condition> <piled_on> </piled_on> </item> <item> <name> pamphlet </name> <description> standard municipal fare. It reads, The City of Chicago's Refuse and Recycling Program combines modern trash classification with cybernetic labor to keep our city beautiful, while at the same time minimizing waste and limiting consumer spending. In keeping with our motto of \"One Resident's Trash Is Another Resident's Treasure,\" unwanted items are collected, repaired, and redistributed to other residents who would have purchased them anyway. Residents should contribute to the city's program by leaving heaps of items unwanted on the sidewalk on collection day </description> <adjectives> </adjectives> <condition> <pristine> </pristine> </condition> <piled_on> </piled_on> </item> </show></command>";
+            let doc = Document::parse(input).unwrap();
+
+            let Command::Show(items) = parse_command(doc.root_element()).unwrap() else {
+                panic!("expected Show");
+            };
+            assert_eq!(items.len(), 2);
         }
     }
     mod kind {
