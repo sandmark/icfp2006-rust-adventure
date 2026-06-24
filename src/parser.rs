@@ -83,6 +83,7 @@ pub enum Command {
     Incinerate(Item),
     Combine(Vec<Item>),
     Use((Item, String)),
+    Examine(Item),
 }
 
 #[derive(Debug, PartialEq)]
@@ -330,6 +331,11 @@ fn parse_command(node: Node) -> Result<Command> {
             let item = parse_item(child.first_element_child().context("use: no item tag")?)?;
             Ok(Command::Use((item, message)))
         }
+        "examine" => Ok(Command::Examine(parse_item(
+            child
+                .first_element_child()
+                .context("examine: no item tag")?,
+        )?)),
         other => {
             let src = &child.document().input_text()[child.range()];
             bail!("NOT IMPLEMENTED: {other}\n{src}");
@@ -1082,6 +1088,18 @@ mod tests {
                 message,
                 "You unlock and open the door. Passing through, you find yourself on the streets of Chicago. Seeing no reason you should ever go back, you allow the door to close behind you."
             );
+        }
+
+        // 正常系: アイテムを調べる
+        #[test]
+        fn test_examine() {
+            let input = "<command><examine> <item> <name> manual </name> <description> <redacted/> </description> <adjectives> </adjectives> <condition> <pristine> </pristine> </condition> <piled_on> </piled_on> </item> </examine></command>";
+            let doc = Document::parse(input).unwrap();
+
+            let Command::Examine(item) = parse_command(doc.root_element()).unwrap() else {
+                panic!("expected Examine");
+            };
+            assert_eq!(item.name, "manual");
         }
     }
     mod kind {

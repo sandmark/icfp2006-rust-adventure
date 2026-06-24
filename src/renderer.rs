@@ -41,6 +41,7 @@ fn render_response(resp: &Response) -> String {
                 format!("--- Inventory ---\n\n{s}\n")
             }
             Command::Take(item) => format!("{} を拾った\n", item.name),
+            Command::Examine(item) => format!("{item}"),
             Command::Incinerate(item) => format!("{} を火葬した…\n", item.name),
             Command::Combine(items) => {
                 format!("{} と {} を組み合わせた\n", items[0].name, items[1].name)
@@ -72,6 +73,18 @@ mod tests {
                 "Used manifesto.".to_owned(),
             )));
             assert!(!render_response(&resp).contains("TODO"));
+        }
+
+        #[test]
+        fn renders_examine() {
+            let resp = Response::Success(Command::Examine(Item {
+                name: "manifesto".to_owned(),
+                description: Description::Redacted,
+                adjectives: vec![],
+                condition: Condition::Pristine,
+                piled_on: None,
+            }));
+            assert!(!render_response(&resp).contains("TODO"))
         }
 
         #[test]
