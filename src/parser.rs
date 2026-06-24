@@ -1068,7 +1068,7 @@ mod tests {
     mod adjectives {
         use super::*;
 
-        // 正常系: カタログ済み 1 件 → 要素 1 個の Vec
+        // 正常系: 1 件 → 要素 1 個の Vec
         #[test]
         fn test_one_covered_adjective() {
             let input = "<adjectives><adjective>red</adjective></adjectives>";
@@ -1086,7 +1086,7 @@ mod tests {
             assert!(parsed(input, parse_adjectives).unwrap().is_empty());
         }
 
-        // 正常系: 要素間の空白 text node は is_element で除かれ、空の Vec (偽 Err にしない)
+        // 正常系: 要素間の空白 text node は is_element で除かれ、空の Vec にする
         #[test]
         fn test_whitespace_only_is_empty() {
             let input = "\n<adjectives>\n              </adjectives>\n";
@@ -1096,7 +1096,7 @@ mod tests {
     mod adjective {
         use super::*;
 
-        // 正常系: 前後の空白を trim してカタログ語に一致させる
+        // 正常系: 前後の空白を trim
         #[test]
         fn test_trims_surrounding_whitespace() {
             let input = "<adjective>\n        green\n       </adjective>";
