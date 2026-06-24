@@ -533,6 +533,11 @@ fn parse_room(node: Node) -> Result<Room> {
 mod tests {
     use super::*;
 
+    fn parsed<T>(input: &str, f: impl FnOnce(Node) -> Result<T>) -> Result<T> {
+        let doc = Document::parse(input).unwrap();
+        f(doc.root_element())
+    }
+
     mod display {
         use super::*;
 
@@ -686,8 +691,7 @@ mod tests {
         #[test]
         fn test_room_with_a_door() {
             let input = " <room> <name> Room With a Door </name> <description> You are in a room with a mechanical door. You will probably need to use a keypad to unlock it. A hallway leads north. </description> <items> <item> <name> pamphlet </name> <description> standard municipal fare. It reads, The City of Chicago's Refuse and Recycling Program combines modern trash classification with cybernetic labor to keep our city beautiful, while at the same time minimizing waste and limiting consumer spending. In keeping with our motto of \"One Resident's Trash Is Another Resident's Treasure,\" unwanted items are collected, repaired, and redistributed to other residents who would have purchased them anyway. Residents should contribute to the city's program by leaving heaps of items unwanted on the sidewalk on collection day </description> <adjectives> </adjectives> <condition> <pristine> </pristine> </condition> <piled_on> <item> <name> manifesto </name> <description> <redacted/> </description> <adjectives> </adjectives> <condition> <pristine> </pristine> </condition> <piled_on> </piled_on> </item> </piled_on> </item> </items> </room>";
-            let doc = Document::parse(input).unwrap();
-            let room = parse_room(doc.root_element()).unwrap();
+            let room = parsed(input, parse_room).unwrap();
 
             assert_eq!(room.name, "Room With a Door".to_owned());
             assert_eq!(room.description, Description::Text("You are in a room with a mechanical door. You will probably need to use a keypad to unlock it. A hallway leads north.".to_owned()));
@@ -701,9 +705,8 @@ mod tests {
         #[test]
         fn test_parse_flat_items() {
             let input = "<show> <item> <name> manifesto </name> <description> <redacted/> </description> <adjectives> </adjectives> <condition> <pristine> </pristine> </condition> <piled_on> </piled_on> </item> <item> <name> pamphlet </name> <description> standard municipal fare. It reads, The City of Chicago's Refuse and Recycling Program combines modern trash classification with cybernetic labor to keep our city beautiful, while at the same time minimizing waste and limiting consumer spending. In keeping with our motto of \"One Resident's Trash Is Another Resident's Treasure,\" unwanted items are collected, repaired, and redistributed to other residents who would have purchased them anyway. Residents should contribute to the city's program by leaving heaps of items unwanted on the sidewalk on collection day </description> <adjectives> </adjectives> <condition> <pristine> </pristine> </condition> <piled_on> </piled_on> </item> </show>";
-            let doc = Document::parse(input).unwrap();
             assert_eq!(
-                parse_items(doc.root_element()).unwrap(),
+                parsed(input, parse_items).unwrap(),
                 vec![
                     Item {
                         name: "manifesto".to_owned(),
@@ -727,9 +730,8 @@ mod tests {
         #[test]
         fn test_parse_items() {
             let input = "<items><item> <name> pamphlet </name> <description> standard municipal fare. It reads, The City of Chicago's Refuse and Recycling Program combines modern trash classification with cybernetic labor to keep our city beautiful, while at the same time minimizing waste and limiting consumer spending. In keeping with our motto of \"One Resident's Trash Is Another Resident's Treasure,\" unwanted items are collected, repaired, and redistributed to other residents who would have purchased them anyway. Residents should contribute to the city's program by leaving heaps of items unwanted on the sidewalk on collection day </description> <adjectives> </adjectives> <condition> <pristine> </pristine> </condition> <piled_on> <item> <name> manifesto </name> <description> <redacted/> </description> <adjectives> </adjectives> <condition> <pristine> </pristine> </condition> <piled_on> </piled_on> </item> </piled_on> </item></items>";
-            let doc = Document::parse(input).unwrap();
             assert_eq!(
-                parse_items(doc.root_element()).unwrap(),
+                parsed(input, parse_items).unwrap(),
                 vec![
                     Item {
                         name: "pamphlet".to_owned(),
@@ -753,9 +755,8 @@ mod tests {
         #[test]
         fn test_item_nested() {
             let input = "<item> <name> pamphlet </name> <description> standard municipal fare. It reads, The City of Chicago's Refuse and Recycling Program combines modern trash classification with cybernetic labor to keep our city beautiful, while at the same time minimizing waste and limiting consumer spending. In keeping with our motto of \"One Resident's Trash Is Another Resident's Treasure,\" unwanted items are collected, repaired, and redistributed to other residents who would have purchased them anyway. Residents should contribute to the city's program by leaving heaps of items unwanted on the sidewalk on collection day </description> <adjectives> </adjectives> <condition> <pristine> </pristine> </condition> <piled_on> <item> <name> manifesto </name> <description> <redacted/> </description> <adjectives> </adjectives> <condition> <pristine> </pristine> </condition> <piled_on> </piled_on> </item> </piled_on> </item>";
-            let doc = Document::parse(input).unwrap();
             assert_eq!(
-                parse_item(doc.root_element()).unwrap(),
+                parsed(input, parse_item).unwrap(),
                 Item {
                     name: "pamphlet".to_owned(),
                     description: Description::Text(
@@ -778,9 +779,8 @@ mod tests {
         #[test]
         fn test_item_on_top() {
             let input = "<item> <name> manifesto </name> <description> <redacted/> </description> <adjectives> </adjectives> <condition> <pristine> </pristine> </condition> <piled_on> </piled_on></item>";
-            let doc = Document::parse(input).unwrap();
             assert_eq!(
-                parse_item(doc.root_element()).unwrap(),
+                parsed(input, parse_item).unwrap(),
                 Item {
                     name: "manifesto".to_owned(),
                     description: Description::Redacted,
@@ -818,8 +818,7 @@ mod tests {
         #[test]
         fn test_unknown() {
             let input = "<unknown><message>unknown message</message></unknown>";
-            let doc = Document::parse(input).unwrap();
-            let msg = format!("{}", parse_response(doc.root_element()).unwrap_err());
+            let msg = format!("{}", parsed(input, parse_response).unwrap_err());
 
             assert_eq!(
                 msg,
@@ -831,9 +830,8 @@ mod tests {
         #[test]
         fn test_go_failed() {
             let input = "<failed><command><go>north</go></command><reason>there is no way north from here</reason></failed>";
-            let doc = Document::parse(input).unwrap();
             assert_eq!(
-                parse_response(doc.root_element()).unwrap(),
+                parsed(input, parse_response).unwrap(),
                 Response::Failed("failed to `go`: there is no way north from here\n".to_string())
             );
         }
@@ -842,10 +840,9 @@ mod tests {
         #[test]
         fn test_take_failed() {
             let input = "<failed> <command> <take> <item> <name> manifesto </name> <description> <redacted/> </description> <adjectives> </adjectives> <condition> <pristine> </pristine> </condition> <piled_on> </piled_on> </item> </take> </command> <reason> there is another item on top of it (take the other item first) </reason> </failed>";
-            let doc = Document::parse(input).unwrap();
 
             assert_eq!(
-                parse_response(doc.root_element()).unwrap(),
+                parsed(input, parse_response).unwrap(),
                 Response::Failed(
                     "failed to `take`: there is another item on top of it (take the other item first)\n".to_owned()
                 )
@@ -856,9 +853,8 @@ mod tests {
         #[test]
         fn test_help() {
             let input = "<help>\n  examine: Inspect an item or your environment. Synonyms include ex, x, look, and l.\n </help>";
-            let doc = Document::parse(input).unwrap();
             assert_eq!(
-                parse_response(doc.root_element()).unwrap(),
+                parsed(input, parse_response).unwrap(),
                 Response::Help("examine: Inspect an item or your environment. Synonyms include ex, x, look, and l.".to_owned())
             );
         }
@@ -867,9 +863,8 @@ mod tests {
         #[test]
         fn test_error() {
             let input = "<error> <response>\nHuh? Try 'help'.\n</response></error>";
-            let doc = Document::parse(input).unwrap();
             assert_eq!(
-                parse_response(doc.root_element()).unwrap(),
+                parsed(input, parse_response).unwrap(),
                 Response::Error("Huh? Try 'help'.".to_owned())
             );
         }
@@ -878,9 +873,8 @@ mod tests {
         #[test]
         fn test_success() {
             let input = "\n<success>\n <command>\n<switch>XML</switch></command></success>";
-            let doc = Document::parse(input).unwrap();
             assert_eq!(
-                parse_response(doc.root_element()).unwrap(),
+                parsed(input, parse_response).unwrap(),
                 Response::Success(Command::Switch("XML".to_owned()))
             );
         }
@@ -892,8 +886,7 @@ mod tests {
         #[test]
         fn test_unimplemented_command_dumps_xml() {
             let input = "<command><test_command><room>x</room></test_command></command>";
-            let doc = Document::parse(input).unwrap();
-            let msg = format!("{}", parse_command(doc.root_element()).unwrap_err());
+            let msg = format!("{}", parsed(input, parse_command).unwrap_err());
             assert_eq!(
                 msg,
                 "NOT IMPLEMENTED: test_command\n<test_command><room>x</room></test_command>"
@@ -904,10 +897,9 @@ mod tests {
         #[test]
         fn test_switch() {
             let input = "\n<command>\n<switch>\n XML\n</switch></command>";
-            let doc = Document::parse(input).unwrap();
 
             assert_eq!(
-                parse_command(doc.root_element()).unwrap(),
+                parsed(input, parse_command).unwrap(),
                 Command::Switch("XML".to_owned())
             );
         }
@@ -916,10 +908,9 @@ mod tests {
         #[test]
         fn test_look() {
             let input = "<command><look> <room> <name> Room With a Door </name> <description> You are in a room with a mechanical door. You will probably need to use a keypad to unlock it. A hallway leads north. </description> <items> <item> <name> pamphlet </name> <description> standard municipal fare. It reads, The City of Chicago's Refuse and Recycling Program combines modern trash classification with cybernetic labor to keep our city beautiful, while at the same time minimizing waste and limiting consumer spending. In keeping with our motto of \"One Resident's Trash Is Another Resident's Treasure,\" unwanted items are collected, repaired, and redistributed to other residents who would have purchased them anyway. Residents should contribute to the city's program by leaving heaps of items unwanted on the sidewalk on collection day </description> <adjectives> </adjectives> <condition> <pristine> </pristine> </condition> <piled_on> <item> <name> manifesto </name> <description> <redacted/> </description> <adjectives> </adjectives> <condition> <pristine> </pristine> </condition> <piled_on> </piled_on> </item> </piled_on> </item> </items> </room> </look> </command> ";
-            let doc = Document::parse(input).unwrap();
 
             assert!(matches!(
-                parse_command(doc.root_element()).unwrap(),
+                parsed(input, parse_command).unwrap(),
                 Command::Look(_)
             ))
         }
@@ -928,10 +919,9 @@ mod tests {
         #[test]
         fn test_go() {
             let input = "<command><go> <room> <name> Room With a Door </name> <description> You are in a room with a mechanical door. You will probably need to use a keypad to unlock it. A hallway leads north. </description> <items> <item> <name> pamphlet </name> <description> standard municipal fare. It reads, The City of Chicago's Refuse and Recycling Program combines modern trash classification with cybernetic labor to keep our city beautiful, while at the same time minimizing waste and limiting consumer spending. In keeping with our motto of \"One Resident's Trash Is Another Resident's Treasure,\" unwanted items are collected, repaired, and redistributed to other residents who would have purchased them anyway. Residents should contribute to the city's program by leaving heaps of items unwanted on the sidewalk on collection day </description> <adjectives> </adjectives> <condition> <pristine> </pristine> </condition> <piled_on> <item> <name> manifesto </name> <description> <redacted/> </description> <adjectives> </adjectives> <condition> <pristine> </pristine> </condition> <piled_on> </piled_on> </item> </piled_on> </item> </items> </room> </go> </command> ";
-            let doc = Document::parse(input).unwrap();
 
             assert!(matches!(
-                parse_command(doc.root_element()).unwrap(),
+                parsed(input, parse_command).unwrap(),
                 Command::Go(_)
             ))
         }
@@ -940,10 +930,9 @@ mod tests {
         #[test]
         fn test_show_empty() {
             let input = "<command><show> </show></command>";
-            let doc = Document::parse(input).unwrap();
 
             assert!(matches!(
-                parse_command(doc.root_element()).unwrap(),
+                parsed(input, parse_command).unwrap(),
                 Command::Show(_)
             ))
         }
@@ -952,9 +941,8 @@ mod tests {
         #[test]
         fn test_show() {
             let input = "<command><show> <item> <name> manifesto </name> <description> <redacted/> </description> <adjectives> </adjectives> <condition> <pristine> </pristine> </condition> <piled_on> </piled_on> </item> <item> <name> pamphlet </name> <description> standard municipal fare. It reads, The City of Chicago's Refuse and Recycling Program combines modern trash classification with cybernetic labor to keep our city beautiful, while at the same time minimizing waste and limiting consumer spending. In keeping with our motto of \"One Resident's Trash Is Another Resident's Treasure,\" unwanted items are collected, repaired, and redistributed to other residents who would have purchased them anyway. Residents should contribute to the city's program by leaving heaps of items unwanted on the sidewalk on collection day </description> <adjectives> </adjectives> <condition> <pristine> </pristine> </condition> <piled_on> </piled_on> </item> </show></command>";
-            let doc = Document::parse(input).unwrap();
 
-            let Command::Show(items) = parse_command(doc.root_element()).unwrap() else {
+            let Command::Show(items) = parsed(input, parse_command).unwrap() else {
                 panic!("expected Show");
             };
             assert_eq!(items.len(), 2);
@@ -964,9 +952,8 @@ mod tests {
         #[test]
         fn test_take() {
             let input = "<command><take> <item> <name> manifesto </name> <description> <redacted/> </description> <adjectives> </adjectives> <condition> <pristine> </pristine> </condition> <piled_on> </piled_on> </item> </take></command>";
-            let doc = Document::parse(input).unwrap();
 
-            let Command::Take(item) = parse_command(doc.root_element()).unwrap() else {
+            let Command::Take(item) = parsed(input, parse_command).unwrap() else {
                 panic!("expected Take");
             };
             assert_eq!(item.name, "manifesto");
@@ -976,9 +963,8 @@ mod tests {
         #[test]
         fn test_incinerate() {
             let input = "<command><incinerate> <item> <name> pamphlet </name> <description> standard municipal fare. It reads, The City of Chicago's Refuse and Recycling Program combines modern trash classification with cybernetic labor to keep our city beautiful, while at the same time minimizing waste and limiting consumer spending. In keeping with our motto of \"One Resident's Trash Is Another Resident's Treasure,\" unwanted items are collected, repaired, and redistributed to other residents who would have purchased them anyway. Residents should contribute to the city's program by leaving heaps of items unwanted on the sidewalk on collection day </description> <adjectives> </adjectives> <condition> <pristine> </pristine> </condition> <piled_on> </piled_on> </item> </incinerate></command>";
-            let doc = Document::parse(input).unwrap();
 
-            let Command::Incinerate(item) = parse_command(doc.root_element()).unwrap() else {
+            let Command::Incinerate(item) = parsed(input, parse_command).unwrap() else {
                 panic!("expected Incinerate");
             };
             assert_eq!(item.name, "pamphlet");
@@ -988,9 +974,8 @@ mod tests {
         #[test]
         fn test_combine() {
             let input = "<command><combine> <item> <name> processor </name> <description> from the elusive 19x86 line </description> <adjectives> </adjectives> <condition> <broken> <condition> <pristine> </pristine> </condition> <missing> <kind> <name> cache </name> <condition> <pristine> </pristine> </condition> </kind> </missing> </broken> </condition> <piled_on> </piled_on> </item> <item> <name> cache </name> <description> fully-associative </description> <adjectives> </adjectives> <condition> <pristine> </pristine> </condition> <piled_on> </piled_on> </item> </combine></command>";
-            let doc = Document::parse(input).unwrap();
 
-            let Command::Combine(items) = parse_command(doc.root_element()).unwrap() else {
+            let Command::Combine(items) = parsed(input, parse_command).unwrap() else {
                 panic!("expected Combine");
             };
             assert_eq!(items.len(), 2);
@@ -1002,9 +987,8 @@ mod tests {
         #[test]
         fn test_use() {
             let input = "<command><use> <item> <name> keypad </name> <description> labeled \"use me\" </description> <adjectives> </adjectives> <condition> <pristine> </pristine> </condition> <piled_on> </piled_on> </item> You unlock and open the door. Passing through, you find yourself on the streets of Chicago. Seeing no reason you should ever go back, you allow the door to close behind you. </use></command>";
-            let doc = Document::parse(input).unwrap();
 
-            let Command::Use((item, message)) = parse_command(doc.root_element()).unwrap() else {
+            let Command::Use((item, message)) = parsed(input, parse_command).unwrap() else {
                 panic!("expected Use");
             };
             assert_eq!(item.name, "keypad");
@@ -1018,9 +1002,8 @@ mod tests {
         #[test]
         fn test_examine() {
             let input = "<command><examine> <item> <name> manual </name> <description> <redacted/> </description> <adjectives> </adjectives> <condition> <pristine> </pristine> </condition> <piled_on> </piled_on> </item> </examine></command>";
-            let doc = Document::parse(input).unwrap();
 
-            let Command::Examine(item) = parse_command(doc.root_element()).unwrap() else {
+            let Command::Examine(item) = parsed(input, parse_command).unwrap() else {
                 panic!("expected Examine");
             };
             assert_eq!(item.name, "manual");
@@ -1033,10 +1016,9 @@ mod tests {
         #[test]
         fn test_missing_collects_kinds() {
             let input = "<missing>\n <kind><name>transistor</name><condition><pristine></pristine></condition></kind>\n <kind><name>antenna</name><condition><pristine></pristine></condition></kind>\n </missing>";
-            let doc = Document::parse(input).unwrap();
 
             assert_eq!(
-                parse_missing(doc.root_element()).unwrap(),
+                parsed(input, parse_missing).unwrap(),
                 vec![
                     Kind {
                         name: String::from("transistor"),
@@ -1054,14 +1036,9 @@ mod tests {
         #[test]
         fn test_kind() {
             let input = "<kind>\n<name>antenna</name>\n<condition><pristine></pristine></condition>\n</kind>";
-            let doc = Document::parse(input).unwrap();
-
             assert_eq!(
-                parse_kind(doc.root_element()).unwrap(),
-                Kind {
-                    name: String::from("antenna"),
-                    condition: Condition::Pristine,
-                }
+                parsed(input, parse_kind).unwrap(),
+                Kind::new("antenna".into(), Condition::Pristine)
             );
         }
     }
@@ -1071,10 +1048,9 @@ mod tests {
         #[test]
         fn test_broken() {
             let input = "<condition><broken>\n  <condition><pristine></pristine></condition>\n  <missing>\n<kind>\n<name>\nantenna</name>\n<condition>\n<pristine></pristine>\n</condition>\n</kind>\n</missing>\n</broken>\n</condition>\n";
-            let doc = Document::parse(input).unwrap();
 
             assert_eq!(
-                parse_condition(doc.root_element()).unwrap(),
+                parsed(input, parse_condition).unwrap(),
                 Condition::Broken(Broken {
                     condition: Box::new(Condition::Pristine),
                     missing: vec![Kind::new("antenna".into(), Condition::Pristine)]
@@ -1085,12 +1061,8 @@ mod tests {
         #[test]
         fn test_pristine() {
             let input = "\n<condition> <pristine> </pristine></condition>";
-            let doc = Document::parse(input).unwrap();
 
-            assert_eq!(
-                parse_condition(doc.root_element()).unwrap(),
-                Condition::Pristine
-            );
+            assert_eq!(parsed(input, parse_condition).unwrap(), Condition::Pristine);
         }
     }
     mod adjectives {
@@ -1100,10 +1072,9 @@ mod tests {
         #[test]
         fn test_one_covered_adjective() {
             let input = "<adjectives><adjective>red</adjective></adjectives>";
-            let doc = Document::parse(input).unwrap();
 
             assert_eq!(
-                parse_adjectives(doc.root_element()).unwrap(),
+                parsed(input, parse_adjectives).unwrap(),
                 vec![Adjective("red".to_owned())]
             );
         }
@@ -1112,16 +1083,14 @@ mod tests {
         #[test]
         fn test_empty_adjectives() {
             let input = "<adjectives></adjectives>";
-            let doc = Document::parse(input).unwrap();
-            assert!(parse_adjectives(doc.root_element()).unwrap().is_empty());
+            assert!(parsed(input, parse_adjectives).unwrap().is_empty());
         }
 
         // 正常系: 要素間の空白 text node は is_element で除かれ、空の Vec (偽 Err にしない)
         #[test]
         fn test_whitespace_only_is_empty() {
             let input = "\n<adjectives>\n              </adjectives>\n";
-            let doc = Document::parse(input).unwrap();
-            assert!(parse_adjectives(doc.root_element()).unwrap().is_empty());
+            assert!(parsed(input, parse_adjectives).unwrap().is_empty());
         }
     }
     mod adjective {
@@ -1131,9 +1100,8 @@ mod tests {
         #[test]
         fn test_trims_surrounding_whitespace() {
             let input = "<adjective>\n        green\n       </adjective>";
-            let doc = Document::parse(input).unwrap();
             assert_eq!(
-                parse_adjective(doc.root_element()).unwrap(),
+                parsed(input, parse_adjective).unwrap(),
                 Adjective("green".to_owned())
             );
         }
@@ -1144,15 +1112,13 @@ mod tests {
         #[test]
         fn test_undefined_inner_tag() {
             let input = "<description><undefined/></description>";
-            let doc = Document::parse(input).unwrap();
-            assert!(parse_description(doc.root_element()).is_err(),)
+            assert!(parsed(input, parse_description).is_err(),)
         }
         #[test]
         fn test_redacted() {
             let input = "<description><redacted/></description>";
-            let doc = Document::parse(input).unwrap();
             assert_eq!(
-                parse_description(doc.root_element()).unwrap(),
+                parsed(input, parse_description).unwrap(),
                 Description::Redacted
             );
         }
@@ -1161,9 +1127,8 @@ mod tests {
         fn test_text() {
             let input = "<description>inner text</description>";
             let text = String::from("inner text");
-            let doc = Document::parse(input).unwrap();
             assert_eq!(
-                parse_description(doc.root_element()).unwrap(),
+                parsed(input, parse_description).unwrap(),
                 Description::Text(text)
             );
         }
