@@ -77,6 +77,7 @@ struct Kind {
 pub enum Command {
     Switch(String),
     Look(Room),
+    Go(Room),
 }
 
 #[derive(Debug, PartialEq)]
@@ -298,6 +299,9 @@ fn parse_command(node: Node) -> Result<Command> {
                 .to_owned(),
         )),
         "look" => Ok(Command::Look(parse_room(
+            child.first_element_child().context("look: no room tag")?,
+        )?)),
+        "go" => Ok(Command::Go(parse_room(
             child.first_element_child().context("look: no room tag")?,
         )?)),
         other => {
@@ -955,6 +959,18 @@ mod tests {
             assert!(matches!(
                 parse_command(doc.root_element()).unwrap(),
                 Command::Look(_)
+            ))
+        }
+
+        // 正常系: go
+        #[test]
+        fn test_go() {
+            let input = "<command><go> <room> <name> Room With a Door </name> <description> You are in a room with a mechanical door. You will probably need to use a keypad to unlock it. A hallway leads north. </description> <items> <item> <name> pamphlet </name> <description> standard municipal fare. It reads, The City of Chicago's Refuse and Recycling Program combines modern trash classification with cybernetic labor to keep our city beautiful, while at the same time minimizing waste and limiting consumer spending. In keeping with our motto of \"One Resident's Trash Is Another Resident's Treasure,\" unwanted items are collected, repaired, and redistributed to other residents who would have purchased them anyway. Residents should contribute to the city's program by leaving heaps of items unwanted on the sidewalk on collection day </description> <adjectives> </adjectives> <condition> <pristine> </pristine> </condition> <piled_on> <item> <name> manifesto </name> <description> <redacted/> </description> <adjectives> </adjectives> <condition> <pristine> </pristine> </condition> <piled_on> </piled_on> </item> </piled_on> </item> </items> </room> </go> </command> ";
+            let doc = Document::parse(input).unwrap();
+
+            assert!(matches!(
+                parse_command(doc.root_element()).unwrap(),
+                Command::Go(_)
             ))
         }
     }

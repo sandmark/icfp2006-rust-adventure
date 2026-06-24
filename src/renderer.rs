@@ -30,6 +30,7 @@ fn render_response(resp: &Response) -> String {
         Response::Success(cmd) => match cmd {
             Command::Switch(r) => format!("`switch` mode: {r}"),
             Command::Look(r) => format!("{r}\n"),
+            Command::Go(r) => format!("{r}\n"),
             other => format!("[RENDER TODO] not implemented {other:?}"),
         },
     }
@@ -43,6 +44,16 @@ mod tests {
         use crate::parser::{Description, Room};
 
         use super::*;
+
+        #[test]
+        fn renders_go_room() {
+            let resp = Response::Success(Command::Go(Room {
+                name: "testroom".to_owned(),
+                description: Description::Redacted,
+                items: vec![],
+            }));
+            assert!(!render_response(&resp).contains("TODO"))
+        }
 
         #[test]
         fn renders_look_room() {
