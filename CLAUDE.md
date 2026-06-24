@@ -38,6 +38,7 @@ Data flows in one direction through a small pipeline; understanding it requires 
 ```
 your stdin ──[thread: relay()]──▶ child stdin
 child stdout ─[main loop, 4 KiB chunks]─▶ Scanner.feed() ─▶ [Segment] ─▶ Renderer.render() ─▶ your screen
+                                                       Segment::Xml ─▶ parser::parse() ─▶ Response ─▶ rendered text
 ```
 
 - **`session.rs` — the orchestrator.** `Session::new` spawns the interpreter with piped
@@ -58,16 +59,29 @@ child stdout ─[main loop, 4 KiB chunks]─▶ Scanner.feed() ─▶ [Segment] 
     complete well-formed document as `Segment::Xml(bytes)`. **Two-context model**: bytes
     *outside* a document (depth 0 — reward codes, blank lines) are lenient passthrough →
     `Segment::Plain`; bytes *inside* (depth ≥ 1) are strict well-formed XML.
-- **`renderer.rs` — the sink.** Currently echoes both `Plain` and `Xml` segments verbatim.
-  Typed parsing of `Segment::Xml` into Rust trees is a later stage.
-- **`lib.rs`** wires the modules and defines `Mode`.
+- **`parser.rs` — the typed XML→DOM layer.** `parse(bytes) -> Result<Response>` turns one
+  complete document into a Rust tree using **`roxmltree`** (a read-only DOM — *distinct* from
+  the streaming `quick-xml` the scanner uses for framing; the two libraries do two different
+  jobs). Root dispatch is on the element name: `success`/`error`/`help`/`failed` → `Response`;
+  inside `success`, `parse_command` builds a `Command` (`Look`/`Go`/`Show`/`Take`/`Combine`/
+  `Use`/`Examine`/…) carrying typed `Room`/`Item`. Note `parse_items` *flattens* a nested
+  `piled_on` pile into a flat `Vec<Item>`. Each `Item`/`Room` carries a `Display` impl, so the
+  player-facing string for a value lives next to the data.
+- **`renderer.rs` — the sink.** `Plain` segments pass through verbatim; `Xml` segments are
+  handed to `parser::parse`, and `render_response` composes per-command, player-facing
+  (Japanese) text around the parsed `Response` (parse failure → `[PARSE ERROR] …`). This is
+  where the shell actually *reshapes* the VM's output, per the goal at the top of this file.
+- **`lib.rs`** wires the modules (`command`, `parser`, `renderer`, `scanner`, `session`) and
+  defines `Mode`.
 
 ### Where the design lives
 
 - `docs/superpowers/specs/*.md` — staged design specs (thin-shell v1, session refactor,
   XML parse). Read the relevant spec before changing `scanner`/`renderer`; they state the
   contract (e.g. "the only allowed assumption is that documents are well-formed XML").
-- `docs/TODO.md` — loose roadmap. `data/xml/` — captured XML samples used as references.
+- `docs/xml.md` — the XML response format `parser` targets; `docs/tui.md` — the TUI sketch
+  `renderer`'s output aims at. `docs/TODO.md` — loose roadmap. `data/xml/` — captured XML
+  samples used as references.
 
 ## Conventions
 
