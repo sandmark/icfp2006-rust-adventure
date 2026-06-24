@@ -259,7 +259,7 @@ fn parse_command(node: Node) -> Result<Command> {
             child.first_element_child().context("look: no room tag")?,
         )?)),
         "go" => Ok(Command::Go(parse_room(
-            child.first_element_child().context("look: no room tag")?,
+            child.first_element_child().context("go: no room tag")?,
         )?)),
         "show" => Ok(Command::Show(parse_items(child)?)),
         "take" => Ok(Command::Take(parse_item(
