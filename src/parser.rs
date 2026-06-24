@@ -81,6 +81,7 @@ pub enum Command {
     Show(Vec<Item>),
     Take(Item),
     Incinerate(Item),
+    Combine(Vec<Item>),
 }
 
 #[derive(Debug, PartialEq)]
@@ -316,6 +317,7 @@ fn parse_command(node: Node) -> Result<Command> {
                 .first_element_child()
                 .context("incinerate: no item tag")?,
         )?)),
+        "combine" => Ok(Command::Combine(parse_items(child)?)),
         other => {
             let src = &child.document().input_text()[child.range()];
             bail!("NOT IMPLEMENTED: {other}\n{src}");
@@ -1038,6 +1040,20 @@ mod tests {
                 panic!("expected Incinerate");
             };
             assert_eq!(item.name, "pamphlet");
+        }
+
+        // 正常系: アイテムを組み合わせる
+        #[test]
+        fn test_combine() {
+            let input = "<command><combine> <item> <name> processor </name> <description> from the elusive 19x86 line </description> <adjectives> </adjectives> <condition> <broken> <condition> <pristine> </pristine> </condition> <missing> <kind> <name> cache </name> <condition> <pristine> </pristine> </condition> </kind> </missing> </broken> </condition> <piled_on> </piled_on> </item> <item> <name> cache </name> <description> fully-associative </description> <adjectives> </adjectives> <condition> <pristine> </pristine> </condition> <piled_on> </piled_on> </item> </combine></command>";
+            let doc = Document::parse(input).unwrap();
+
+            let Command::Combine(items) = parse_command(doc.root_element()).unwrap() else {
+                panic!("expected Combine");
+            };
+            assert_eq!(items.len(), 2);
+            assert_eq!(items[0].name, "processor");
+            assert_eq!(items[1].name, "cache");
         }
     }
     mod kind {

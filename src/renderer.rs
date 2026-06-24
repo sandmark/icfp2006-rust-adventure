@@ -42,6 +42,9 @@ fn render_response(resp: &Response) -> String {
             }
             Command::Take(item) => format!("{} を拾った\n", item.name),
             Command::Incinerate(item) => format!("{} を火葬した…\n", item.name),
+            Command::Combine(items) => {
+                format!("{} と {} を組み合わせた\n", items[0].name, items[1].name)
+            }
             other => format!("[RENDER TODO] not implemented {other:?}"),
         },
     }
@@ -76,6 +79,27 @@ mod tests {
                 condition: Condition::Pristine,
                 piled_on: None,
             }));
+            assert!(!render_response(&resp).contains("TODO"))
+        }
+
+        #[test]
+        fn renders_combine() {
+            let resp = Response::Success(Command::Combine(vec![
+                Item {
+                    name: "foo".to_owned(),
+                    description: Description::Redacted,
+                    adjectives: vec![],
+                    condition: Condition::Pristine,
+                    piled_on: None,
+                },
+                Item {
+                    name: "bar".to_owned(),
+                    description: Description::Redacted,
+                    adjectives: vec![],
+                    condition: Condition::Pristine,
+                    piled_on: None,
+                },
+            ]));
             assert!(!render_response(&resp).contains("TODO"))
         }
 
