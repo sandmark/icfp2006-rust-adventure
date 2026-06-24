@@ -38,7 +38,7 @@ fn render_response(resp: &Response) -> String {
                 } else {
                     &coll.join("\n")
                 };
-                format!("--- Inventory ---\n\n{s}\n")
+                format!("--- Inventory {}/6---\n\n{s}\n", items.len())
             }
             Command::Take(item) => format!("{} を拾った\n", item.name),
             Command::Examine(item) => format!("{item}"),
