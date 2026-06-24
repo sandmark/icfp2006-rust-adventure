@@ -82,6 +82,7 @@ pub enum Command {
     Take(Item),
     Incinerate(Item),
     Combine(Vec<Item>),
+    Use((Item, String)),
 }
 
 #[derive(Debug, PartialEq)]
@@ -318,6 +319,17 @@ fn parse_command(node: Node) -> Result<Command> {
                 .context("incinerate: no item tag")?,
         )?)),
         "combine" => Ok(Command::Combine(parse_items(child)?)),
+        "use" => {
+            let message = child
+                .children()
+                .filter(|n| n.is_text())
+                .filter_map(|n| n.text())
+                .collect::<String>()
+                .trim()
+                .to_owned();
+            let item = parse_item(child.first_element_child().context("use: no item tag")?)?;
+            Ok(Command::Use((item, message)))
+        }
         other => {
             let src = &child.document().input_text()[child.range()];
             bail!("NOT IMPLEMENTED: {other}\n{src}");
@@ -1054,6 +1066,22 @@ mod tests {
             assert_eq!(items.len(), 2);
             assert_eq!(items[0].name, "processor");
             assert_eq!(items[1].name, "cache");
+        }
+
+        // 正常系: アイテムを使用する
+        #[test]
+        fn test_use() {
+            let input = "<command><use> <item> <name> keypad </name> <description> labeled \"use me\" </description> <adjectives> </adjectives> <condition> <pristine> </pristine> </condition> <piled_on> </piled_on> </item> You unlock and open the door. Passing through, you find yourself on the streets of Chicago. Seeing no reason you should ever go back, you allow the door to close behind you. </use></command>";
+            let doc = Document::parse(input).unwrap();
+
+            let Command::Use((item, message)) = parse_command(doc.root_element()).unwrap() else {
+                panic!("expected Use");
+            };
+            assert_eq!(item.name, "keypad");
+            assert_eq!(
+                message,
+                "You unlock and open the door. Passing through, you find yourself on the streets of Chicago. Seeing no reason you should ever go back, you allow the door to close behind you."
+            );
         }
     }
     mod kind {

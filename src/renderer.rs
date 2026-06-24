@@ -45,6 +45,7 @@ fn render_response(resp: &Response) -> String {
             Command::Combine(items) => {
                 format!("{} と {} を組み合わせた\n", items[0].name, items[1].name)
             }
+            Command::Use((item, message)) => format!("{item} を使った\n---\n{message}"),
             other => format!("[RENDER TODO] not implemented {other:?}"),
         },
     }
@@ -57,6 +58,21 @@ mod tests {
     mod response {
         use super::*;
         use crate::parser::{Condition, Description, Item, Room};
+
+        #[test]
+        fn renders_use() {
+            let resp = Response::Success(Command::Use((
+                Item {
+                    name: "manifesto".to_owned(),
+                    description: Description::Redacted,
+                    adjectives: vec![],
+                    condition: Condition::Pristine,
+                    piled_on: None,
+                },
+                "Used manifesto.".to_owned(),
+            )));
+            assert!(!render_response(&resp).contains("TODO"));
+        }
 
         #[test]
         fn renders_take() {
