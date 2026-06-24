@@ -47,7 +47,6 @@ fn render_response(resp: &Response) -> String {
                 format!("{} と {} を組み合わせた\n", items[0].name, items[1].name)
             }
             Command::Use((item, message)) => format!("{item} を使った\n---\n{message}"),
-            other => format!("[RENDER TODO] not implemented {other:?}"),
         },
     }
 }
