@@ -1,41 +1,6 @@
-//! # XML Parser
-//!
-//! XML 構造そのままだと縦長になるので便宜上 edn 形式で記述している。
-//!
-//! ## `switch xml`
-//! ```text
-//! {:success
-//!  {:command
-//!   {:switch "XML"}}}
-//! ```
-//!
-//! ## `examine` (`go north`)
-//!
-//! ```text
-//! {:success
-//!  {:command
-//!   {:go
-//!    {:room
-//!     {:name "Room With a Door"
-//!      :description "You are in a room with a mechanical door. You will probably need to use a keypad to unlock it. A hallway leads north."
-//!      :items
-//!       [{:item
-//!         {:name "pamphlet"
-//!          :description "standard municipal fare. It reads, The City of Chicago's Refuse and Recycling Program combines modern trash classification with cybernetic labor to keep our city beautiful, while at the same time minimizing waste and limiting consumer spending. In keeping with our motto of "One Resident's Trash Is Another Resident's Treasure," unwanted items are collected, repaired, and redistributed to other residents who would have purchased them anyway. Residents should contribute to the city's program by leaving heaps of items unwanted on the sidewalk on collection day"
-//!          :adjectives []
-//!          :condition :pristine
-//!          :piled_on
-//!           [{:item
-//!             {:name "manifesto"
-//!              :description :redacted
-//!              :adjectives []
-//!              :condition :pristine
-//!              :piled_on []
-//! ```
-use std::fmt::Display;
-
 use anyhow::{Context, Result, bail};
 use roxmltree::{Document, Node};
+use std::fmt::Display;
 
 /// DOM: アイテムの説明
 #[derive(Debug, PartialEq)]
@@ -280,10 +245,6 @@ impl Display for Room {
 // Parser
 // --------------------------------------------------
 
-/// - switch
-/// ```text
-/// {:command {:switch string?}}
-/// ```
 fn parse_command(node: Node) -> Result<Command> {
     let child = node.first_element_child().context("empty command tag")?;
     match child.tag_name().name() {
@@ -355,23 +316,6 @@ fn parse_response_failed(node: Node) -> Result<Response> {
     )))
 }
 
-/// - error
-/// ```text
-/// {:error
-///  {:response string?}}
-/// ```
-///
-/// - help
-/// ```text
-/// {:help string?}
-/// ```
-///
-/// - success
-/// ```text
-/// {:success
-///  {:command
-///   {:switch string?}}}
-/// ```
 fn parse_response(node: Node) -> Result<Response> {
     match node.tag_name().name() {
         "error" => Ok(Response::Error(
