@@ -79,6 +79,7 @@ pub enum Command {
     Look(Room),
     Go(Room),
     Show(Vec<Item>),
+    Take(Item),
 }
 
 #[derive(Debug, PartialEq)]
@@ -306,6 +307,9 @@ fn parse_command(node: Node) -> Result<Command> {
             child.first_element_child().context("look: no room tag")?,
         )?)),
         "show" => Ok(Command::Show(parse_items(child)?)),
+        "take" => Ok(Command::Take(parse_item(
+            child.first_element_child().context("take: no item tag")?,
+        )?)),
         other => {
             let src = &child.document().input_text()[child.range()];
             bail!("NOT IMPLEMENTED: {other}\n{src}");
@@ -998,6 +1002,18 @@ mod tests {
                 panic!("expected Show");
             };
             assert_eq!(items.len(), 2);
+        }
+
+        // 正常系: アイテムを拾う
+        #[test]
+        fn test_take() {
+            let input = "<command><take> <item> <name> manifesto </name> <description> <redacted/> </description> <adjectives> </adjectives> <condition> <pristine> </pristine> </condition> <piled_on> </piled_on> </item> </take></command>";
+            let doc = Document::parse(input).unwrap();
+
+            let Command::Take(item) = parse_command(doc.root_element()).unwrap() else {
+                panic!("expected Take");
+            };
+            assert_eq!(item.name, "manifesto");
         }
     }
     mod kind {

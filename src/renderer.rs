@@ -40,6 +40,9 @@ fn render_response(resp: &Response) -> String {
                 };
                 format!("--- Inventory ---\n\n{s}\n")
             }
+            Command::Take(item) => {
+                format!("{} を拾った\n", item.name)
+            }
             other => format!("[RENDER TODO] not implemented {other:?}"),
         },
     }
@@ -50,9 +53,20 @@ mod tests {
     use super::*;
 
     mod response {
-        use crate::parser::{Description, Room};
-
         use super::*;
+        use crate::parser::{Condition, Description, Item, Room};
+
+        #[test]
+        fn renders_take() {
+            let resp = Response::Success(Command::Take(Item {
+                name: "manifesto".to_owned(),
+                description: Description::Redacted,
+                adjectives: vec![],
+                condition: Condition::Pristine,
+                piled_on: None,
+            }));
+            assert!(!render_response(&resp).contains("TODO"))
+        }
 
         #[test]
         fn renders_show_inventory() {
