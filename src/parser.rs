@@ -44,14 +44,9 @@ pub enum Description {
     Redacted,
 }
 
-/// DOM: アイテムの見た目
+/// DOM: アイテムの特徴
 #[derive(Debug, PartialEq)]
-pub enum Adjective {
-    Red,
-    Green,
-    Blue,
-    Other(String),
-}
+pub struct Adjective(String);
 
 /// DOM: アイテムの状態
 #[derive(Debug, PartialEq)]
@@ -168,12 +163,7 @@ impl Display for Description {
 
 impl Display for Adjective {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Adjective::Red => write!(f, "red"),
-            Adjective::Green => write!(f, "green"),
-            Adjective::Blue => write!(f, "blue"),
-            Adjective::Other(color) => write!(f, "other({color})"),
-        }
+        write!(f, "{}", self.0)
     }
 }
 
@@ -427,13 +417,7 @@ fn parse_description(node: Node) -> Result<Description> {
 
 fn parse_adjective(node: Node) -> Result<Adjective> {
     let text = node.text().unwrap_or_default().trim();
-    match text {
-        "red" => Ok(Adjective::Red),
-        "green" => Ok(Adjective::Green),
-        "blue" => Ok(Adjective::Blue),
-        "" => bail!("empty adjective"),
-        other => Ok(Adjective::Other(other.to_string())),
-    }
+    Ok(Adjective(text.to_owned()))
 }
 
 fn parse_adjectives(node: Node) -> Result<Vec<Adjective>> {
@@ -616,11 +600,7 @@ mod tests {
 
         #[test]
         fn test_adjective() {
-            assert_eq!(Adjective::Red.to_string(), "red");
-            assert_eq!(
-                Adjective::Other("color".to_owned()).to_string(),
-                "other(color)"
-            );
+            assert_eq!(Adjective("red".to_owned()).to_string(), "red");
         }
 
         #[test]
@@ -1172,15 +1152,6 @@ mod tests {
     mod adjectives {
         use super::*;
 
-        // 異常系: 中の <adjective> が空なら、その Err が plural 層まで伝播する
-        #[test]
-        fn test_empty_inner_adjective_is_err() {
-            let input = "<adjectives><adjective></adjective></adjectives>";
-            let doc = Document::parse(input).unwrap();
-
-            assert!(parse_adjectives(doc.root_element()).is_err());
-        }
-
         // 正常系: カタログ済み 1 件 → 要素 1 個の Vec
         #[test]
         fn test_one_covered_adjective() {
@@ -1189,7 +1160,7 @@ mod tests {
 
             assert_eq!(
                 parse_adjectives(doc.root_element()).unwrap(),
-                vec![Adjective::Red]
+                vec![Adjective("red".to_owned())]
             );
         }
 
@@ -1212,25 +1183,6 @@ mod tests {
     mod adjective {
         use super::*;
 
-        // 異常系: 中身が空 (trim 後に "") なら Err
-        #[test]
-        fn test_empty_adjective() {
-            let input = "<adjective></adjective>";
-            let doc = Document::parse(input).unwrap();
-            assert!(parse_adjective(doc.root_element()).is_err());
-        }
-
-        // 正常系: 未カタログ語は Other(String) に保持される
-        #[test]
-        fn test_unknown_adjective() {
-            let input = "<adjective>unknown</adjective>";
-            let doc = Document::parse(input).unwrap();
-            assert_eq!(
-                parse_adjective(doc.root_element()).unwrap(),
-                Adjective::Other(String::from("unknown"))
-            );
-        }
-
         // 正常系: 前後の空白を trim してカタログ語に一致させる
         #[test]
         fn test_trims_surrounding_whitespace() {
@@ -1238,27 +1190,8 @@ mod tests {
             let doc = Document::parse(input).unwrap();
             assert_eq!(
                 parse_adjective(doc.root_element()).unwrap(),
-                Adjective::Green
+                Adjective("green".to_owned())
             );
-        }
-
-        // 正常系: カタログ語は対応する variant へ (表駆動)
-        #[test]
-        fn test_covered_adjectives() {
-            for (input, want) in [
-                ("red", Adjective::Red),
-                ("green", Adjective::Green),
-                ("blue", Adjective::Blue),
-            ] {
-                let xml = format!("<adjective>{input}</adjective>");
-                let doc = Document::parse(&xml).unwrap();
-
-                assert_eq!(
-                    parse_adjective(doc.root_element()).unwrap(),
-                    want,
-                    "input={input:?}"
-                );
-            }
         }
     }
     mod description {
