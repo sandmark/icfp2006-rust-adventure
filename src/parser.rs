@@ -80,6 +80,7 @@ pub enum Command {
     Go(Room),
     Show(Vec<Item>),
     Take(Item),
+    Incinerate(Item),
 }
 
 #[derive(Debug, PartialEq)]
@@ -309,6 +310,11 @@ fn parse_command(node: Node) -> Result<Command> {
         "show" => Ok(Command::Show(parse_items(child)?)),
         "take" => Ok(Command::Take(parse_item(
             child.first_element_child().context("take: no item tag")?,
+        )?)),
+        "incinerate" => Ok(Command::Incinerate(parse_item(
+            child
+                .first_element_child()
+                .context("incinerate: no item tag")?,
         )?)),
         other => {
             let src = &child.document().input_text()[child.range()];
@@ -1014,6 +1020,18 @@ mod tests {
                 panic!("expected Take");
             };
             assert_eq!(item.name, "manifesto");
+        }
+
+        // 正常系: アイテムを削除する
+        #[test]
+        fn test_incinerate() {
+            let input = "<command><incinerate> <item> <name> pamphlet </name> <description> standard municipal fare. It reads, The City of Chicago's Refuse and Recycling Program combines modern trash classification with cybernetic labor to keep our city beautiful, while at the same time minimizing waste and limiting consumer spending. In keeping with our motto of \"One Resident's Trash Is Another Resident's Treasure,\" unwanted items are collected, repaired, and redistributed to other residents who would have purchased them anyway. Residents should contribute to the city's program by leaving heaps of items unwanted on the sidewalk on collection day </description> <adjectives> </adjectives> <condition> <pristine> </pristine> </condition> <piled_on> </piled_on> </item> </incinerate></command>";
+            let doc = Document::parse(input).unwrap();
+
+            let Command::Incinerate(item) = parse_command(doc.root_element()).unwrap() else {
+                panic!("expected Incinerate");
+            };
+            assert_eq!(item.name, "pamphlet");
         }
     }
     mod kind {

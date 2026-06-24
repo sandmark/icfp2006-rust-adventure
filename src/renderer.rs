@@ -40,9 +40,8 @@ fn render_response(resp: &Response) -> String {
                 };
                 format!("--- Inventory ---\n\n{s}\n")
             }
-            Command::Take(item) => {
-                format!("{} を拾った\n", item.name)
-            }
+            Command::Take(item) => format!("{} を拾った\n", item.name),
+            Command::Incinerate(item) => format!("{} を火葬した…\n", item.name),
             other => format!("[RENDER TODO] not implemented {other:?}"),
         },
     }
@@ -59,6 +58,18 @@ mod tests {
         #[test]
         fn renders_take() {
             let resp = Response::Success(Command::Take(Item {
+                name: "manifesto".to_owned(),
+                description: Description::Redacted,
+                adjectives: vec![],
+                condition: Condition::Pristine,
+                piled_on: None,
+            }));
+            assert!(!render_response(&resp).contains("TODO"))
+        }
+
+        #[test]
+        fn renders_incinerate() {
+            let resp = Response::Success(Command::Incinerate(Item {
                 name: "manifesto".to_owned(),
                 description: Description::Redacted,
                 adjectives: vec![],
