@@ -46,7 +46,7 @@ pub enum Description {
 
 /// DOM: アイテムの見た目
 #[derive(Debug, PartialEq)]
-enum Adjective {
+pub enum Adjective {
     Red,
     Green,
     Blue,
@@ -55,14 +55,14 @@ enum Adjective {
 
 /// DOM: アイテムの状態
 #[derive(Debug, PartialEq)]
-enum Condition {
+pub enum Condition {
     Pristine,
     Broken(Broken),
 }
 
 /// DOM: 壊れたアイテムと必要な依存関係
 #[derive(Debug, PartialEq)]
-struct Broken {
+pub struct Broken {
     condition: Box<Condition>,
     missing: Vec<Kind>,
 }
@@ -532,9 +532,9 @@ fn parse_item(node: Node) -> Result<Item> {
     }
 }
 
-/// 複数の <item> を [Vec] にして返す。
-/// フラットな <item></item> の並びであればそのまま [Vec] にし、
-/// ネストした <item><piled_on><item>... であればフラットにして [Vec] へ push する。
+/// 複数の `<item>` を [Vec] にして返す。
+/// フラットな `<item></item>` の並びであればそのまま [Vec] にし、
+/// ネストした `<item><piled_on><item>...` であればフラットにして [Vec] へ push する。
 fn parse_items(node: Node) -> Result<Vec<Item>> {
     let mut items = Vec::new();
 

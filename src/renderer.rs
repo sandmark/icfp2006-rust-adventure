@@ -1,5 +1,5 @@
 use crate::{
-    parser::{Command, Description, Item, Response, Room, parse},
+    parser::{Command, Response, parse},
     scanner::Segment,
 };
 use std::io::{self, Write};
