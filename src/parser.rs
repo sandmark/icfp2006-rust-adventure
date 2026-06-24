@@ -538,6 +538,36 @@ mod tests {
         f(doc.root_element())
     }
 
+    const PAMPHLET_DESC: &str = "standard municipal fare. It reads, The City of Chicago's Refuse and Recycling Program combines modern trash classification with cybernetic labor to keep our city beautiful, while at the same time minimizing waste and limiting consumer spending. In keeping with our motto of \"One Resident's Trash Is Another Resident's Treasure,\" unwanted items are collected, repaired, and redistributed to other residents who would have purchased them anyway. Residents should contribute to the city's program by leaving heaps of items unwanted on the sidewalk on collection day";
+    const MANIFESTO_XML: &str = "<item> <name> manifesto </name> <description> <redacted/> </description> <adjectives> </adjectives> <condition> <pristine> </pristine> </condition> <piled_on> </piled_on> </item>";
+
+    // pamphlet の `<item>` 片。`piled_on` に別アイテムの XML を差し込めばネストも作れる。
+    fn pamphlet_xml(piled_on: &str) -> String {
+        format!(
+            "<item> <name> pamphlet </name> <description> {PAMPHLET_DESC} </description> <adjectives> </adjectives> <condition> <pristine> </pristine> </condition> <piled_on> {piled_on} </piled_on> </item>"
+        )
+    }
+
+    fn pamphlet() -> Item {
+        Item {
+            name: "pamphlet".to_owned(),
+            description: Description::Text(PAMPHLET_DESC.to_owned()),
+            adjectives: vec![],
+            condition: Condition::Pristine,
+            piled_on: None,
+        }
+    }
+
+    fn manifesto() -> Item {
+        Item {
+            name: "manifesto".to_owned(),
+            description: Description::Redacted,
+            adjectives: vec![],
+            condition: Condition::Pristine,
+            piled_on: None,
+        }
+    }
+
     mod display {
         use super::*;
 
@@ -690,8 +720,11 @@ mod tests {
         // 部屋の名前、詳細、アイテムすべてを [Room] にする。
         #[test]
         fn test_room_with_a_door() {
-            let input = " <room> <name> Room With a Door </name> <description> You are in a room with a mechanical door. You will probably need to use a keypad to unlock it. A hallway leads north. </description> <items> <item> <name> pamphlet </name> <description> standard municipal fare. It reads, The City of Chicago's Refuse and Recycling Program combines modern trash classification with cybernetic labor to keep our city beautiful, while at the same time minimizing waste and limiting consumer spending. In keeping with our motto of \"One Resident's Trash Is Another Resident's Treasure,\" unwanted items are collected, repaired, and redistributed to other residents who would have purchased them anyway. Residents should contribute to the city's program by leaving heaps of items unwanted on the sidewalk on collection day </description> <adjectives> </adjectives> <condition> <pristine> </pristine> </condition> <piled_on> <item> <name> manifesto </name> <description> <redacted/> </description> <adjectives> </adjectives> <condition> <pristine> </pristine> </condition> <piled_on> </piled_on> </item> </piled_on> </item> </items> </room>";
-            let room = parsed(input, parse_room).unwrap();
+            let input = format!(
+                " <room> <name> Room With a Door </name> <description> You are in a room with a mechanical door. You will probably need to use a keypad to unlock it. A hallway leads north. </description> <items> {} </items> </room>",
+                pamphlet_xml(MANIFESTO_XML)
+            );
+            let room = parsed(&input, parse_room).unwrap();
 
             assert_eq!(room.name, "Room With a Door".to_owned());
             assert_eq!(room.description, Description::Text("You are in a room with a mechanical door. You will probably need to use a keypad to unlock it. A hallway leads north.".to_owned()));
@@ -704,73 +737,32 @@ mod tests {
         // フラットなアイテムを Vec にする。
         #[test]
         fn test_parse_flat_items() {
-            let input = "<show> <item> <name> manifesto </name> <description> <redacted/> </description> <adjectives> </adjectives> <condition> <pristine> </pristine> </condition> <piled_on> </piled_on> </item> <item> <name> pamphlet </name> <description> standard municipal fare. It reads, The City of Chicago's Refuse and Recycling Program combines modern trash classification with cybernetic labor to keep our city beautiful, while at the same time minimizing waste and limiting consumer spending. In keeping with our motto of \"One Resident's Trash Is Another Resident's Treasure,\" unwanted items are collected, repaired, and redistributed to other residents who would have purchased them anyway. Residents should contribute to the city's program by leaving heaps of items unwanted on the sidewalk on collection day </description> <adjectives> </adjectives> <condition> <pristine> </pristine> </condition> <piled_on> </piled_on> </item> </show>";
+            let input = format!("<show> {MANIFESTO_XML} {} </show>", pamphlet_xml(""));
             assert_eq!(
-                parsed(input, parse_items).unwrap(),
-                vec![
-                    Item {
-                        name: "manifesto".to_owned(),
-                        description: Description::Redacted,
-                        adjectives: vec![],
-                        condition: Condition::Pristine,
-                        piled_on: None
-                    },
-                    Item {
-                        name: "pamphlet".to_owned(),
-                        description: Description::Text("standard municipal fare. It reads, The City of Chicago's Refuse and Recycling Program combines modern trash classification with cybernetic labor to keep our city beautiful, while at the same time minimizing waste and limiting consumer spending. In keeping with our motto of \"One Resident's Trash Is Another Resident's Treasure,\" unwanted items are collected, repaired, and redistributed to other residents who would have purchased them anyway. Residents should contribute to the city's program by leaving heaps of items unwanted on the sidewalk on collection day".to_owned()),
-                        adjectives: vec![],
-                        condition: Condition::Pristine,
-                        piled_on: None
-                    },
-                ]
+                parsed(&input, parse_items).unwrap(),
+                vec![manifesto(), pamphlet()]
             );
         }
 
         // ネストしたアイテムをフラットな Vec にする。
         #[test]
         fn test_parse_items() {
-            let input = "<items><item> <name> pamphlet </name> <description> standard municipal fare. It reads, The City of Chicago's Refuse and Recycling Program combines modern trash classification with cybernetic labor to keep our city beautiful, while at the same time minimizing waste and limiting consumer spending. In keeping with our motto of \"One Resident's Trash Is Another Resident's Treasure,\" unwanted items are collected, repaired, and redistributed to other residents who would have purchased them anyway. Residents should contribute to the city's program by leaving heaps of items unwanted on the sidewalk on collection day </description> <adjectives> </adjectives> <condition> <pristine> </pristine> </condition> <piled_on> <item> <name> manifesto </name> <description> <redacted/> </description> <adjectives> </adjectives> <condition> <pristine> </pristine> </condition> <piled_on> </piled_on> </item> </piled_on> </item></items>";
+            let input = format!("<items>{}</items>", pamphlet_xml(MANIFESTO_XML));
             assert_eq!(
-                parsed(input, parse_items).unwrap(),
-                vec![
-                    Item {
-                        name: "pamphlet".to_owned(),
-                        description: Description::Text("standard municipal fare. It reads, The City of Chicago's Refuse and Recycling Program combines modern trash classification with cybernetic labor to keep our city beautiful, while at the same time minimizing waste and limiting consumer spending. In keeping with our motto of \"One Resident's Trash Is Another Resident's Treasure,\" unwanted items are collected, repaired, and redistributed to other residents who would have purchased them anyway. Residents should contribute to the city's program by leaving heaps of items unwanted on the sidewalk on collection day".to_owned()),
-                        adjectives: vec![],
-                        condition: Condition::Pristine,
-                        piled_on: None
-                    },
-                    Item {
-                        name: "manifesto".to_owned(),
-                        description: Description::Redacted,
-                        adjectives: vec![],
-                        condition: Condition::Pristine,
-                        piled_on: None
-                    }
-                ]
+                parsed(&input, parse_items).unwrap(),
+                vec![pamphlet(), manifesto()]
             );
         }
 
         // 積み上がった (ネストした) アイテムを構造体にする。
         #[test]
         fn test_item_nested() {
-            let input = "<item> <name> pamphlet </name> <description> standard municipal fare. It reads, The City of Chicago's Refuse and Recycling Program combines modern trash classification with cybernetic labor to keep our city beautiful, while at the same time minimizing waste and limiting consumer spending. In keeping with our motto of \"One Resident's Trash Is Another Resident's Treasure,\" unwanted items are collected, repaired, and redistributed to other residents who would have purchased them anyway. Residents should contribute to the city's program by leaving heaps of items unwanted on the sidewalk on collection day </description> <adjectives> </adjectives> <condition> <pristine> </pristine> </condition> <piled_on> <item> <name> manifesto </name> <description> <redacted/> </description> <adjectives> </adjectives> <condition> <pristine> </pristine> </condition> <piled_on> </piled_on> </item> </piled_on> </item>";
+            let input = pamphlet_xml(MANIFESTO_XML);
             assert_eq!(
-                parsed(input, parse_item).unwrap(),
+                parsed(&input, parse_item).unwrap(),
                 Item {
-                    name: "pamphlet".to_owned(),
-                    description: Description::Text(
-                        "standard municipal fare. It reads, The City of Chicago's Refuse and Recycling Program combines modern trash classification with cybernetic labor to keep our city beautiful, while at the same time minimizing waste and limiting consumer spending. In keeping with our motto of \"One Resident's Trash Is Another Resident's Treasure,\" unwanted items are collected, repaired, and redistributed to other residents who would have purchased them anyway. Residents should contribute to the city's program by leaving heaps of items unwanted on the sidewalk on collection day".to_owned()
-                    ),
-                    adjectives: vec![],
-                    condition: Condition::Pristine,
-                    piled_on: Some(Box::new(Item {
-                        name: "manifesto".to_owned(),
-                        description: Description::Redacted,
-                        adjectives: vec![],
-                        condition: Condition::Pristine,
-                        piled_on: None
-                    }))
+                    piled_on: Some(Box::new(manifesto())),
+                    ..pamphlet()
                 }
             );
         }
@@ -778,17 +770,8 @@ mod tests {
         // 積み上がっていないアイテムを構造体にする。
         #[test]
         fn test_item_on_top() {
-            let input = "<item> <name> manifesto </name> <description> <redacted/> </description> <adjectives> </adjectives> <condition> <pristine> </pristine> </condition> <piled_on> </piled_on></item>";
-            assert_eq!(
-                parsed(input, parse_item).unwrap(),
-                Item {
-                    name: "manifesto".to_owned(),
-                    description: Description::Redacted,
-                    adjectives: vec![],
-                    condition: Condition::Pristine,
-                    piled_on: None
-                }
-            );
+            let input = MANIFESTO_XML;
+            assert_eq!(parsed(input, parse_item).unwrap(), manifesto());
         }
     }
     mod entry {
@@ -839,10 +822,12 @@ mod tests {
         // 異常系: アイテムが拾えない
         #[test]
         fn test_take_failed() {
-            let input = "<failed> <command> <take> <item> <name> manifesto </name> <description> <redacted/> </description> <adjectives> </adjectives> <condition> <pristine> </pristine> </condition> <piled_on> </piled_on> </item> </take> </command> <reason> there is another item on top of it (take the other item first) </reason> </failed>";
+            let input = format!(
+                "<failed> <command> <take> {MANIFESTO_XML} </take> </command> <reason> there is another item on top of it (take the other item first) </reason> </failed>"
+            );
 
             assert_eq!(
-                parsed(input, parse_response).unwrap(),
+                parsed(&input, parse_response).unwrap(),
                 Response::Failed(
                     "failed to `take`: there is another item on top of it (take the other item first)\n".to_owned()
                 )
@@ -907,10 +892,13 @@ mod tests {
         // 正常系: look
         #[test]
         fn test_look() {
-            let input = "<command><look> <room> <name> Room With a Door </name> <description> You are in a room with a mechanical door. You will probably need to use a keypad to unlock it. A hallway leads north. </description> <items> <item> <name> pamphlet </name> <description> standard municipal fare. It reads, The City of Chicago's Refuse and Recycling Program combines modern trash classification with cybernetic labor to keep our city beautiful, while at the same time minimizing waste and limiting consumer spending. In keeping with our motto of \"One Resident's Trash Is Another Resident's Treasure,\" unwanted items are collected, repaired, and redistributed to other residents who would have purchased them anyway. Residents should contribute to the city's program by leaving heaps of items unwanted on the sidewalk on collection day </description> <adjectives> </adjectives> <condition> <pristine> </pristine> </condition> <piled_on> <item> <name> manifesto </name> <description> <redacted/> </description> <adjectives> </adjectives> <condition> <pristine> </pristine> </condition> <piled_on> </piled_on> </item> </piled_on> </item> </items> </room> </look> </command> ";
+            let input = format!(
+                "<command><look> <room> <name> Room With a Door </name> <description> You are in a room with a mechanical door. You will probably need to use a keypad to unlock it. A hallway leads north. </description> <items> {} </items> </room> </look> </command> ",
+                pamphlet_xml(MANIFESTO_XML)
+            );
 
             assert!(matches!(
-                parsed(input, parse_command).unwrap(),
+                parsed(&input, parse_command).unwrap(),
                 Command::Look(_)
             ))
         }
@@ -918,10 +906,13 @@ mod tests {
         // 正常系: go
         #[test]
         fn test_go() {
-            let input = "<command><go> <room> <name> Room With a Door </name> <description> You are in a room with a mechanical door. You will probably need to use a keypad to unlock it. A hallway leads north. </description> <items> <item> <name> pamphlet </name> <description> standard municipal fare. It reads, The City of Chicago's Refuse and Recycling Program combines modern trash classification with cybernetic labor to keep our city beautiful, while at the same time minimizing waste and limiting consumer spending. In keeping with our motto of \"One Resident's Trash Is Another Resident's Treasure,\" unwanted items are collected, repaired, and redistributed to other residents who would have purchased them anyway. Residents should contribute to the city's program by leaving heaps of items unwanted on the sidewalk on collection day </description> <adjectives> </adjectives> <condition> <pristine> </pristine> </condition> <piled_on> <item> <name> manifesto </name> <description> <redacted/> </description> <adjectives> </adjectives> <condition> <pristine> </pristine> </condition> <piled_on> </piled_on> </item> </piled_on> </item> </items> </room> </go> </command> ";
+            let input = format!(
+                "<command><go> <room> <name> Room With a Door </name> <description> You are in a room with a mechanical door. You will probably need to use a keypad to unlock it. A hallway leads north. </description> <items> {} </items> </room> </go> </command> ",
+                pamphlet_xml(MANIFESTO_XML)
+            );
 
             assert!(matches!(
-                parsed(input, parse_command).unwrap(),
+                parsed(&input, parse_command).unwrap(),
                 Command::Go(_)
             ))
         }
@@ -940,9 +931,12 @@ mod tests {
         // 正常系: 空ではないインベントリ
         #[test]
         fn test_show() {
-            let input = "<command><show> <item> <name> manifesto </name> <description> <redacted/> </description> <adjectives> </adjectives> <condition> <pristine> </pristine> </condition> <piled_on> </piled_on> </item> <item> <name> pamphlet </name> <description> standard municipal fare. It reads, The City of Chicago's Refuse and Recycling Program combines modern trash classification with cybernetic labor to keep our city beautiful, while at the same time minimizing waste and limiting consumer spending. In keeping with our motto of \"One Resident's Trash Is Another Resident's Treasure,\" unwanted items are collected, repaired, and redistributed to other residents who would have purchased them anyway. Residents should contribute to the city's program by leaving heaps of items unwanted on the sidewalk on collection day </description> <adjectives> </adjectives> <condition> <pristine> </pristine> </condition> <piled_on> </piled_on> </item> </show></command>";
+            let input = format!(
+                "<command><show> {MANIFESTO_XML} {} </show></command>",
+                pamphlet_xml("")
+            );
 
-            let Command::Show(items) = parsed(input, parse_command).unwrap() else {
+            let Command::Show(items) = parsed(&input, parse_command).unwrap() else {
                 panic!("expected Show");
             };
             assert_eq!(items.len(), 2);
@@ -951,9 +945,9 @@ mod tests {
         // 正常系: アイテムを拾う
         #[test]
         fn test_take() {
-            let input = "<command><take> <item> <name> manifesto </name> <description> <redacted/> </description> <adjectives> </adjectives> <condition> <pristine> </pristine> </condition> <piled_on> </piled_on> </item> </take></command>";
+            let input = format!("<command><take> {MANIFESTO_XML} </take></command>");
 
-            let Command::Take(item) = parsed(input, parse_command).unwrap() else {
+            let Command::Take(item) = parsed(&input, parse_command).unwrap() else {
                 panic!("expected Take");
             };
             assert_eq!(item.name, "manifesto");
@@ -962,9 +956,12 @@ mod tests {
         // 正常系: アイテムを削除する
         #[test]
         fn test_incinerate() {
-            let input = "<command><incinerate> <item> <name> pamphlet </name> <description> standard municipal fare. It reads, The City of Chicago's Refuse and Recycling Program combines modern trash classification with cybernetic labor to keep our city beautiful, while at the same time minimizing waste and limiting consumer spending. In keeping with our motto of \"One Resident's Trash Is Another Resident's Treasure,\" unwanted items are collected, repaired, and redistributed to other residents who would have purchased them anyway. Residents should contribute to the city's program by leaving heaps of items unwanted on the sidewalk on collection day </description> <adjectives> </adjectives> <condition> <pristine> </pristine> </condition> <piled_on> </piled_on> </item> </incinerate></command>";
+            let input = format!(
+                "<command><incinerate> {} </incinerate></command>",
+                pamphlet_xml("")
+            );
 
-            let Command::Incinerate(item) = parsed(input, parse_command).unwrap() else {
+            let Command::Incinerate(item) = parsed(&input, parse_command).unwrap() else {
                 panic!("expected Incinerate");
             };
             assert_eq!(item.name, "pamphlet");
@@ -1001,12 +998,12 @@ mod tests {
         // 正常系: アイテムを調べる
         #[test]
         fn test_examine() {
-            let input = "<command><examine> <item> <name> manual </name> <description> <redacted/> </description> <adjectives> </adjectives> <condition> <pristine> </pristine> </condition> <piled_on> </piled_on> </item> </examine></command>";
+            let input = format!("<command><examine>{MANIFESTO_XML}</examine></command>");
 
-            let Command::Examine(item) = parsed(input, parse_command).unwrap() else {
+            let Command::Examine(item) = parsed(&input, parse_command).unwrap() else {
                 panic!("expected Examine");
             };
-            assert_eq!(item.name, "manual");
+            assert_eq!(item, manifesto());
         }
     }
     mod kind {
