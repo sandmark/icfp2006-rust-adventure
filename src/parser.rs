@@ -42,7 +42,7 @@ pub enum Command {
     Take(Item),
     Incinerate(Item),
     Combine(Vec<Item>),
-    Use((Item, String)),
+    Use(Item, String),
     Examine(Item),
 }
 
@@ -207,11 +207,10 @@ impl Display for Broken {
 
 impl Display for Item {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let adjectives = if self.adjectives.is_empty() {
-            "なし"
+        let adjectives: String = if self.adjectives.is_empty() {
+            "なし".into()
         } else {
-            &self
-                .adjectives
+            self.adjectives
                 .iter()
                 .map(|a| a.to_string())
                 .collect::<Vec<String>>()
@@ -239,6 +238,29 @@ impl Display for Room {
             self.name, self.description, items
         )
     }
+}
+
+// --------------------------------------------------
+// Helper
+// --------------------------------------------------
+
+fn sanitize_help(text: &str) -> Result<String> {
+    let inner = text
+        .strip_prefix("<help>")
+        .and_then(|s| s.strip_suffix("</help>"))
+        .context("malformed <help> tags")?
+        .trim();
+    let escaped = inner
+        .replace('&', "&amp;")
+        .replace('<', "&lt;")
+        .replace('>', "&gt;");
+    Ok(format!("<help>{escaped}</help>"))
+}
+
+fn child<'a>(node: Node<'a, 'a>, name: &str) -> Result<Node<'a, 'a>> {
+    node.children()
+        .find(|n| n.has_tag_name(name))
+        .with_context(|| format!("<{}> not found in <{}>", name, node.tag_name().name()))
 }
 
 // --------------------------------------------------
@@ -280,7 +302,7 @@ fn parse_command(node: Node) -> Result<Command> {
                 .trim()
                 .to_owned();
             let item = parse_item(child.first_element_child().context("use: no item tag")?)?;
-            Ok(Command::Use((item, message)))
+            Ok(Command::Use(item, message))
         }
         "examine" => Ok(Command::Examine(parse_item(
             child
@@ -295,22 +317,15 @@ fn parse_command(node: Node) -> Result<Command> {
 }
 
 fn parse_response_failed(node: Node) -> Result<Response> {
-    let reason = node
-        .children()
-        .find(|n| n.has_tag_name("reason"))
-        .context("failed tag has no reason")?
+    let reason = child(node, "reason")?
         .text()
         .context("reason tag has no text")?
         .trim();
-    let command = node
-        .children()
-        .find(|n| n.has_tag_name("command"))
-        .context("failed tag has no command")?
+    let command = child(node, "command")?
         .first_element_child()
         .context("command tag has no children")?
         .tag_name()
-        .name()
-        .trim();
+        .name();
     Ok(Response::Failed(format!(
         "failed to `{command}`: {reason}\n"
     )))
@@ -372,21 +387,15 @@ fn parse_adjectives(node: Node) -> Result<Vec<Adjective>> {
 }
 
 fn parse_condition(node: Node) -> Result<Condition> {
-    let child = node
+    let child_node = node
         .first_element_child()
         .context("taking first element of condition")?;
 
-    match child.tag_name().name() {
+    match child_node.tag_name().name() {
         "pristine" => Ok(Condition::Pristine),
         "broken" => {
-            let condition_node = child
-                .children()
-                .find(|n| n.has_tag_name("condition"))
-                .context("no condition tag in broken")?;
-            let missing_node = child
-                .children()
-                .find(|n| n.has_tag_name("missing"))
-                .context("no missing tag in broken")?;
+            let condition_node = child(child_node, "condition")?;
+            let missing_node = child(child_node, "missing")?;
             let condition = parse_condition(condition_node)?;
             let missing = parse_missing(missing_node)?;
             Ok(Condition::Broken(Broken::new(condition, missing)))
@@ -396,16 +405,14 @@ fn parse_condition(node: Node) -> Result<Condition> {
 }
 
 fn parse_kind(node: Node) -> Result<Kind> {
-    let name_node = node
-        .children()
-        .find(|n| n.has_tag_name("name"))
-        .context("kind without inner name")?;
-    let condition_node = node
-        .children()
-        .find(|n| n.has_tag_name("condition"))
-        .context("kind without inner condition")?;
+    let name_node = child(node, "name")?;
+    let condition_node = child(node, "condition")?;
     let condition = parse_condition(condition_node)?;
-    let name = name_node.text().unwrap_or_default().trim().to_owned();
+    let name = name_node
+        .text()
+        .context("name has no text")?
+        .trim()
+        .to_owned();
 
     Ok(Kind::new(name, condition))
 }
@@ -415,19 +422,6 @@ fn parse_missing(node: Node) -> Result<Vec<Kind>> {
         .filter(|n| n.is_element())
         .map(parse_kind)
         .collect::<Result<Vec<_>>>()
-}
-
-fn sanitize_help(text: &str) -> Result<String> {
-    let inner = text
-        .strip_prefix("<help>")
-        .and_then(|s| s.strip_suffix("</help>"))
-        .context("malformed <help> tags")?
-        .trim();
-    let escaped = inner
-        .replace('&', "&amp;")
-        .replace('<', "&lt;")
-        .replace('>', "&gt;");
-    Ok(format!("<help>{escaped}</help>"))
 }
 
 pub fn parse(bytes: &[u8]) -> Result<Response> {
@@ -444,35 +438,15 @@ pub fn parse(bytes: &[u8]) -> Result<Response> {
 }
 
 fn parse_item(node: Node) -> Result<Item> {
-    let name = node
-        .children()
-        .find(|n| n.has_tag_name("name"))
-        .context("item tag has no name")?
+    let name = child(node, "name")?
         .text()
         .context("item name is empty")?
         .trim();
-    let description = parse_description(
-        node.children()
-            .find(|n| n.has_tag_name("description"))
-            .context("item tag has no description")?,
-    )?;
-    let adjectives = parse_adjectives(
-        node.children()
-            .find(|n| n.has_tag_name("adjectives"))
-            .context("item tag has no adjectives")?,
-    )?;
-    let condition = parse_condition(
-        node.children()
-            .find(|n| n.has_tag_name("condition"))
-            .context("item tag has no condition")?,
-    )?;
+    let description = parse_description(child(node, "description")?)?;
+    let adjectives = parse_adjectives(child(node, "adjectives")?)?;
+    let condition = parse_condition(child(node, "condition")?)?;
 
-    if let Some(piled_on) = node
-        .children()
-        .find(|n| n.has_tag_name("piled_on"))
-        .context("item tag has no piled_on")?
-        .first_element_child()
-    {
+    if let Some(piled_on) = child(node, "piled_on")?.first_element_child() {
         Ok(Item::new(
             name.to_owned(),
             description,
@@ -511,23 +485,12 @@ fn parse_items(node: Node) -> Result<Vec<Item>> {
 }
 
 fn parse_room(node: Node) -> Result<Room> {
-    let name = node
-        .children()
-        .find(|n| n.has_tag_name("name"))
-        .context("room tag has no name")?
+    let name = child(node, "name")?
         .text()
         .context("name tag is empty")?
         .trim();
-    let description = parse_description(
-        node.children()
-            .find(|n| n.has_tag_name("description"))
-            .context("room tag has no description")?,
-    )?;
-    let items = parse_items(
-        node.children()
-            .find(|n| n.has_tag_name("items"))
-            .context("room tag has no items")?,
-    )?;
+    let description = parse_description(child(node, "description")?)?;
+    let items = parse_items(child(node, "items")?)?;
     Ok(Room::new(name.to_owned(), description, items))
 }
 
@@ -994,7 +957,7 @@ mod tests {
         fn test_use() {
             let input = "<command><use> <item> <name> keypad </name> <description> labeled \"use me\" </description> <adjectives> </adjectives> <condition> <pristine> </pristine> </condition> <piled_on> </piled_on> </item> You unlock and open the door. Passing through, you find yourself on the streets of Chicago. Seeing no reason you should ever go back, you allow the door to close behind you. </use></command>";
 
-            let Command::Use((item, message)) = parsed(input, parse_command).unwrap() else {
+            let Command::Use(item, message) = parsed(input, parse_command).unwrap() else {
                 panic!("expected Use");
             };
             assert_eq!(item.name, "keypad");
