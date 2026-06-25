@@ -516,8 +516,7 @@ fn parse_room(node: Node) -> Result<Room> {
         .find(|n| n.has_tag_name("name"))
         .context("room tag has no name")?
         .text()
-        .context("name tag is empty")
-        .unwrap_or_default()
+        .context("name tag is empty")?
         .trim();
     let description = parse_description(
         node.children()
