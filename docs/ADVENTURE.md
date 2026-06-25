@@ -166,3 +166,18 @@ ANSI エスケープシーケンスで描写されるようになる。
     s
     use keypad
     
+## シカゴシティ
+
+### 地図
+
+| <None>             | 52 St.   & Dorchester | 52 St.   & Blackstone | 52 St.   & Harper |
+| <None>             | 53 St.   & Dorchester | 53 St.   & Blackstone | 53 St.   & Harper |
+| 54 St. & Ridgewood | 54 St.   & Dorchester | 54 St.   & Blackstone | 54 St.   & Harper |
+| <None>             | 54 Place & Dorchester | 54 Place & Blackstone | 54 Place & Harper |
+
+**54 Street and Ridgewood** からスタートする。
+
+X = (Ridgewood, Dorchester, Blackstone, Harper)
+Y = (52-St, 53-St, 54-St, 54-Place)
+
+`downloader`, `uploader` の機能によってはさらに拡張するのだろうか？
