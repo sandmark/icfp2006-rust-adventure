@@ -46,7 +46,7 @@ fn render_response(resp: &Response) -> String {
             Command::Combine(items) => {
                 format!("{} と {} を組み合わせた\n", items[0].name, items[1].name)
             }
-            Command::Use(item, message) => format!("{item} を使った\n---\n{message}"),
+            Command::Use(item, message) => format!("{} を使った\n---\n{message}", item.name),
         },
     }
 }
