@@ -132,3 +132,37 @@ pprint されるが、閉じ括弧など一部のコンテキストの間には�
 ANSI エスケープシーケンスで描写されるようになる。
 
 **上部にスコアと場所を表示するステータスバーが追加される。**
+
+## チュートリアル: Room With a Door からの脱出
+
+    n
+    take bolt
+    take spring
+    take button
+    take processor
+    take pill
+    inc pill
+    take radio
+    take cache
+    combine processor with cache
+    take blue transistor
+    combine radio with transistor
+    take antenna
+    inc antenna
+    inc spring
+    take screw
+    take motherboard
+    combine motherboard with screw
+    take a-1920-ixb
+    combine a-1920-ixb with radio
+    combine a-1920-ixb with bolt
+    combine a-1920-ixb with processor
+    take transistor
+    take keypad
+    combine a-1920-ixb with transistor
+    combine motherboard with a-1920-ixb
+    combine keypad with motherboard
+    combine keypad with button
+    s
+    use keypad
+    
